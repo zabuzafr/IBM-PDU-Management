@@ -1,0 +1,30 @@
+version: "3.9"
+services:
+  api:
+    build: ./backend
+    environment:
+      - SECRET_KEY=change_me
+      - USE_MOCK=true            # true = pas d’accès SNMP, renvoie des données simulées
+      - SNMP_VERSION=2c          # 2c ou 3
+      - SNMP_COMMUNITY=public    # v2c
+      # Pour SNMPv3, ajoutez :
+      # - SNMPV3_USER=ops
+      # - SNMPV3_AUTH=SHA
+      # - SNMPV3_AUTH_KEY=xxxx
+      # - SNMPV3_PRIV=AES
+      # - SNMPV3_PRIV_KEY=yyyy
+      - ALLOWED_ORIGINS=*
+    volumes:
+      - ./data:/app/data
+      - ./backend/models.yaml:/app/models.yaml
+    ports:
+      - "8000:8000"
+
+  ui:
+    build: ./frontend
+    environment:
+      - VITE_API_BASE=http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
