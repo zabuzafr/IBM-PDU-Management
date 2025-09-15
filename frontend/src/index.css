@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light dark; }
+body { @apply bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100; }
+.card { @apply rounded-2xl shadow-sm border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900; }
+.btn { @apply px-3 py-2 rounded-xl border text-sm font-medium hover:opacity-90; }
+.btn-primary { @apply border-neutral-900 dark:border-neutral-100; }
+.btn-ghost { @apply border-transparent; }
+.input { @apply px-3 py-2 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/70 w-full; }
+.table { @apply w-full text-sm; }
+.table th, .table td { @apply px-2 py-2; }
+.badge { @apply inline-flex items-center px-2 py-1 rounded-lg text-xs border; }
+.badge-on { @apply border-green-400 text-green-700 dark:text-green-300; }
+.badge-off { @apply border-red-400 text-red-700 dark:text-red-300; }
