@@ -1,0 +1,682 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<presentation title="Étude Comparative Solutions Backup Kubernetes / Red Hat OpenShift" date="2025-03" confidentialite="CONFIDENTIEL – Usage Interne">
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="1" type="titre">
+    <surtitre>ÉTUDE COMPARATIVE</surtitre>
+    <titre>Solutions de Sauvegarde Kubernetes / Red Hat OpenShift</titre>
+    <solutions>
+      <solution>Veritas NetBackup for Kubernetes</solution>
+      <solution>Commvault Complete for Kubernetes</solution>
+      <solution>Portworx PX-Backup (Pure Storage)</solution>
+    </solutions>
+    <stockage>
+      <cible retention="10 ans">Bibliothèque LTO (LTO-8 / LTO-9)</cible>
+      <cible retention="1 mois – 1 an">Dell EMC Data Domain</cible>
+    </stockage>
+    <soustitre>Conformité DORA – RGPD – Exigences Secteur Financier</soustitre>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="2" type="sommaire">
+    <titre>Sommaire</titre>
+    <sections>
+      <section numero="01">
+        <titre>Cadre réglementaire</titre>
+        <description>Exigences DORA, RPO/RTO, politiques de sauvegarde</description>
+      </section>
+      <section numero="02">
+        <titre>Architecture cible</titre>
+        <description>LTO pour 10 ans · Data Domain 1 mois–1 an · Topologie</description>
+      </section>
+      <section numero="03">
+        <titre>Veritas NetBackup for Kubernetes</titre>
+        <description>Fonctionnalités, intégrations, points forts et faibles</description>
+      </section>
+      <section numero="04">
+        <titre>Commvault Complete for Kubernetes</titre>
+        <description>Fonctionnalités, intégrations, points forts et faibles</description>
+      </section>
+      <section numero="05">
+        <titre>Portworx PX-Backup</titre>
+        <description>Fonctionnalités, intégrations, points forts et faibles</description>
+      </section>
+      <section numero="06">
+        <titre>Analyse comparative</titre>
+        <description>Matrice de fonctionnalités · Scoring · Intégration stockage</description>
+      </section>
+      <section numero="07">
+        <titre>Conformité DORA</titre>
+        <description>Mapping exigences / solutions article par article</description>
+      </section>
+      <section numero="08">
+        <titre>Recommandation et Conclusion</titre>
+        <description>Synthèse, critères de choix, plan d'action</description>
+      </section>
+    </sections>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="3" type="contenu">
+    <titre>Cadre réglementaire DORA</titre>
+    <soustitre>Digital Operational Resilience Act – Règlement UE 2022/2554 – En vigueur depuis janvier 2025</soustitre>
+    <intro>Exigences DORA impactant directement la stratégie de sauvegarde</intro>
+    <blocs>
+
+      <bloc article="Art. 9 et 12">
+        <titre_bloc>Protection et Continuité</titre_bloc>
+        <items>
+          <item>Politique documentée de sauvegarde (RPO/RTO formalisés)</item>
+          <item>Tests périodiques obligatoires des procédures de restauration</item>
+          <item>Sauvegarde des données critiques avec chiffrement en transit et au repos</item>
+          <item>Ségrégation des sauvegardes (isolées du réseau de production)</item>
+        </items>
+      </bloc>
+
+      <bloc article="Art. 11">
+        <titre_bloc>Politiques de rétention</titre_bloc>
+        <items>
+          <item>Rétention minimale 7 ans pour les établissements financiers</item>
+          <item>Immutabilité des sauvegardes (protection anti-ransomware)</item>
+          <item>Traçabilité des accès aux données sauvegardées (audit log)</item>
+          <item>Support des supports longue durée (LTO WORM, stockage immuable)</item>
+        </items>
+      </bloc>
+
+      <bloc article="Art. 13 et 25">
+        <titre_bloc>Tests de résilience</titre_bloc>
+        <items>
+          <item>TLPT (Threat Led Penetration Testing) annuel obligatoire</item>
+          <item>Tests de restauration documentés et validés trimestriellement</item>
+          <item>BCP/DRP incluant les workloads Kubernetes</item>
+          <item>Simulations de sinistre incluant perte totale d'un cluster</item>
+        </items>
+      </bloc>
+
+      <bloc article="Art. 28-44">
+        <titre_bloc>Risque tiers et reporting</titre_bloc>
+        <items>
+          <item>Due diligence sur les fournisseurs de solutions de backup</item>
+          <item>Contrats TPSP (Third Party Service Provider) avec SLA backup</item>
+          <item>Notification incidents ICT : moins de 4h (initial), moins de 24h (intermédiaire)</item>
+          <item>Registre des dépendances critiques tiers</item>
+        </items>
+      </bloc>
+
+    </blocs>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="4" type="contenu">
+    <titre>Architecture cible de sauvegarde</titre>
+    <soustitre>LTO (rétention 10 ans) + Dell EMC Data Domain (1 mois – 1 an)</soustitre>
+
+    <tiers>
+      <tier nom="TIER 1 – DISK" retention="Court / Moyen terme">
+        <produit>Dell EMC Data Domain</produit>
+        <items>
+          <item>Déduplication globale jusqu'à 65:1 (DDBoost)</item>
+          <item>Rétention : 1 mois (logs) à 12 mois (données métier)</item>
+          <item>Protocoles supportés : DDBoost, NFS, CIFS, S3 compatible, OST</item>
+        </items>
+      </tier>
+      <tier nom="TIER 2 – BANDE" retention="Long terme">
+        <produit>Bibliothèque LTO (LTO-8 / LTO-9)</produit>
+        <items>
+          <item>Capacité native LTO-9 : 18 TB/cartouche (45 TB compressé)</item>
+          <item>Rétention : 3 ans à 10 ans (conformité DORA / fiscale)</item>
+          <item>Support WORM (cartouches non réinscriptibles) + chiffrement AES-256</item>
+        </items>
+      </tier>
+    </tiers>
+
+    <sources>
+      <source>Cluster OpenShift (Production)</source>
+      <source>Namespaces / PVCs / ETCD / ConfigMaps / Secrets / CRDs / Helm Releases</source>
+    </sources>
+
+    <matrice_retention>
+      <en_tete>
+        <col>Type de données</col>
+        <col>Fréquence</col>
+        <col>Rétention Data Domain</col>
+        <col>Rétention LTO</col>
+      </en_tete>
+      <ligne>
+        <type>Manifests K8s / Config</type>
+        <frequence>Quotidien</frequence>
+        <data_domain>3 mois</data_domain>
+        <lto>7 ans (DORA)</lto>
+      </ligne>
+      <ligne>
+        <type>Volumes persistants (PVC)</type>
+        <frequence>Quotidien / Horaire</frequence>
+        <data_domain>1 mois (incrémentiel)</data_domain>
+        <lto>3 ans</lto>
+      </ligne>
+      <ligne>
+        <type>ETCD cluster</type>
+        <frequence>Toutes les 6h</frequence>
+        <data_domain>1 mois</data_domain>
+        <lto>1 an</lto>
+      </ligne>
+      <ligne>
+        <type>Données applicatives critiques</type>
+        <frequence>Quotidien</frequence>
+        <data_domain>6 mois</data_domain>
+        <lto>10 ans</lto>
+      </ligne>
+      <ligne>
+        <type>Logs opérationnels</type>
+        <frequence>Quotidien</frequence>
+        <data_domain>1 mois</data_domain>
+        <lto>7 ans (réglementaire)</lto>
+      </ligne>
+    </matrice_retention>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="5" type="contenu">
+    <titre>Veritas NetBackup for Kubernetes</titre>
+    <soustitre>Solution enterprise – Opérateur natif Kubernetes – Intégration Data Domain et LTO</soustitre>
+    <editeur>Veritas Technologies</editeur>
+
+    <categories>
+
+      <categorie nom="Déploiement et Intégration K8s">
+        <items>
+          <item>Opérateur Kubernetes natif (Helm chart + CRDs)</item>
+          <item>Support OpenShift 4.x certifié Red Hat</item>
+          <item>RBAC granulaire par namespace</item>
+          <item>Découverte automatique des namespaces et PVCs</item>
+          <item>API REST pour l'orchestration et l'automatisation</item>
+        </items>
+      </categorie>
+
+      <categorie nom="Capacités de sauvegarde">
+        <items>
+          <item>Backup au niveau namespace, label selector, application</item>
+          <item>Sauvegarde cohérente application-aware (hooks pre/post)</item>
+          <item>Support des snapshots CSI (Container Storage Interface)</item>
+          <item>Sauvegarde incrémentale block-level (BLIB) pour PVCs</item>
+          <item>Copie de catalogue chiffrée pour la reprise catalogue</item>
+        </items>
+      </categorie>
+
+      <categorie nom="Intégration stockage">
+        <items>
+          <item>Data Domain via OST (OpenStorage Technology) natif : déduplication DDBoost</item>
+          <item>LTO via Media Server NetBackup : support WORM, chiffrement AES-256</item>
+          <item>CloudCatalyst pour staging vers S3 avant LTO (optimisation bande passante)</item>
+          <item>MSDP (Media Server Deduplication Pool) en alternative Data Domain</item>
+          <item>Support multi-target : DD + LTO simultanément via SLP (Storage Lifecycle Policy)</item>
+        </items>
+      </categorie>
+
+      <categorie nom="Reporting et Compliance">
+        <items>
+          <item>OpsCenter : tableau de bord centralisé multi-cluster</item>
+          <item>Rapports de conformité DORA (rétention, chiffrement, tests)</item>
+          <item>Audit log complet des opérations de sauvegarde et restauration</item>
+          <item>Alertes proactives (échec job, quota, expiration)</item>
+        </items>
+      </categorie>
+
+    </categories>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="6" type="analyse">
+    <titre>Veritas NetBackup – Analyse Points Forts / Points Faibles</titre>
+    <soustitre>Évaluation objective basée sur les fonctionnalités produit et retours terrain</soustitre>
+
+    <points_forts>
+      <item>Maturité produit : plus de 30 ans d'expérience enterprise, référence secteur financier</item>
+      <item>Intégration LTO la plus complète : SLP (Storage Lifecycle Policy) gère automatiquement le tiering DD vers LTO</item>
+      <item>DDBoost natif : déduplication côté client, réduit le trafic réseau de 50 à 80%</item>
+      <item>Granularité fine : restauration fichier, namespace, PVC, manifeste individuel</item>
+      <item>Multi-cloud : backup vers AWS S3, Azure Blob, GCS + LTO (flexibilité cible)</item>
+      <item>Chiffrement AES-256 en transit et au repos (exigence DORA Art. 9)</item>
+      <item>SLA et support enterprise : support 24/7, SLA contractuels, certifications FIPS 140-2</item>
+      <item>Catalogue répliqué : survie à la perte complète du master server (immutabilité)</item>
+    </points_forts>
+
+    <points_faibles>
+      <item>Complexité de déploiement : architecture multi-composants (Master, Media Servers, Client) avec charge d'administration élevée</item>
+      <item>Coût de licence élevé : modèle FETB (Front-End Terabyte) + options coûteuses (Kubernetes Add-on, CloudCatalyst)</item>
+      <item>Interface utilisateur vieillissante : NetBackup Web UI améliorée mais inférieure aux concurrents cloud-native</item>
+      <item>Agilité Kubernetes limitée : conçu historiquement pour VMs et physique, le support K8s est un add-on</item>
+      <item>Footprint important : consommation ressources significative dans le cluster (opérateur, agents)</item>
+      <item>Mises à jour : cycles de release longs comparés aux outils cloud-native</item>
+      <item>Formation requise : courbe d'apprentissage élevée pour les équipes DevOps</item>
+    </points_faibles>
+
+    <positionnement>Solution de référence pour les environnements enterprise hybrides nécessitant une intégration LTO et Data Domain éprouvée. Recommandée pour les DSI matures avec équipes backup dédiées.</positionnement>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="7" type="contenu">
+    <titre>Commvault Complete Backup and Recovery for Kubernetes</titre>
+    <soustitre>Plateforme unifiée – Protection données exhaustive – DDBoost natif</soustitre>
+    <editeur>Commvault Systems</editeur>
+
+    <categories>
+
+      <categorie nom="Déploiement et Intégration K8s">
+        <items>
+          <item>Opérateur Kubernetes via Helm chart (déploiement simplifié)</item>
+          <item>Certifié Red Hat OpenShift 4.x (catalogue OperatorHub)</item>
+          <item>MediaAgent déployable comme pod dans le cluster</item>
+          <item>Support multi-cluster depuis une console unique (Command Center)</item>
+          <item>RBAC natif, intégration LDAP/AD/SAML pour l'authentification</item>
+        </items>
+      </categorie>
+
+      <categorie nom="Capacités de sauvegarde">
+        <items>
+          <item>Granularité : cluster, namespace, application, pod, PVC, fichier</item>
+          <item>IntelliSnap : snapshots CSI (NetApp, Pure Storage, Dell EMC...)</item>
+          <item>Sauvegarde incrémentale forever (CBT/CBR pour volumes persistants)</item>
+          <item>Hooks applicatifs pre/post pour cohérence (base de données, etc.)</item>
+          <item>Live Sync : réplication quasi-temps-réel pour DR (RPO inférieur à 15 min possible)</item>
+        </items>
+      </categorie>
+
+      <categorie nom="Intégration stockage LTO et Data Domain">
+        <items>
+          <item>DDBoost intégré nativement dans le MediaAgent Commvault</item>
+          <item>LTO via MediaAgent : support bibliothèques physiques et VTL</item>
+          <item>Auxiliaire Copy automatique : Data Domain vers LTO selon règles de rétention</item>
+          <item>WORM sur LTO avec cartouches WORM native + chiffrement matériel LTO-9</item>
+          <item>Air-gap automatique : isolation réseau des sauvegardes sur bande</item>
+        </items>
+      </categorie>
+
+      <categorie nom="Compliance et Reporting">
+        <items>
+          <item>Metallic (SaaS) : option cloud disponible pour les copies hors-site</item>
+          <item>Compliance Lock : immuabilité des sauvegardes (anti-ransomware)</item>
+          <item>Rapports DORA prêts à l'emploi (rétention, chiffrement, tests de restauration)</item>
+          <item>Threat Scan : analyse malware des sauvegardes avant restauration</item>
+        </items>
+      </categorie>
+
+    </categories>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="8" type="analyse">
+    <titre>Commvault – Analyse Points Forts / Points Faibles</titre>
+    <soustitre>Évaluation objective basée sur les fonctionnalités produit et retours terrain</soustitre>
+
+    <points_forts>
+      <item>Interface Command Center moderne et intuitive : adoption rapide par les équipes</item>
+      <item>Plateforme unifiée : backup VMs, physique, K8s, SaaS (M365, Salesforce) depuis une seule console</item>
+      <item>IntelliSnap : intégration profonde avec les baies de stockage enterprise (délégation snapshot au storage)</item>
+      <item>Compliance Lock natif : immuabilité WORM des sauvegardes sans matériel dédié</item>
+      <item>Threat Scan : détection malware et ransomware dans les backups avant restauration</item>
+      <item>Live Sync : DR actif-passif pour les applications critiques Kubernetes (faible RPO)</item>
+      <item>Metallic (SaaS) : option cloud pour les copies offsite sans infrastructure supplémentaire</item>
+      <item>Coût total maîtrisé : licences par capacité, options claires sans surprise</item>
+    </points_forts>
+
+    <points_faibles>
+      <item>Architecture complexe : CommServe (serveur central), MediaAgents, clients – nombreux composants à maintenir</item>
+      <item>Footprint ressource : MediaAgent dans le cluster consomme des ressources non négligeables</item>
+      <item>Support K8s moins mature que Portworx : ajouts progressifs, certaines fonctionnalités avancées encore limitées</item>
+      <item>Licensing complexe : multiplication des modules optionnels (IntelliSnap, LiveSync, Threat Scan) – coût difficile à anticiper</item>
+      <item>Intégration LTO via MediaAgent uniquement : pas de support bibliothèque LTO directement dans le cluster K8s</item>
+      <item>Délai de restauration granulaire (fichier) : plus lent que les solutions snapshots natives pour les PVCs larges</item>
+    </points_faibles>
+
+    <positionnement>Solution polyvalente idéale pour les DSI souhaitant une plateforme unifiée couvrant l'ensemble des workloads (K8s, VMs, physique, SaaS). Excellent équilibre fonctionnalités / complexité.</positionnement>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="9" type="contenu">
+    <titre>Portworx PX-Backup (Pure Storage)</titre>
+    <soustitre>Solution cloud-native Kubernetes-first – Backup et DR orientés conteneurs</soustitre>
+    <editeur>Pure Storage (acquisition Portworx 2020)</editeur>
+
+    <categories>
+
+      <categorie nom="Déploiement et Intégration K8s">
+        <items>
+          <item>Architecture 100% Kubernetes-native : déployé entièrement comme pods</item>
+          <item>PX-Central : console de gestion multi-cluster cloud-native</item>
+          <item>OpenShift certifié, intégration OperatorHub</item>
+          <item>Stockage distribué Portworx Enterprise : CSI driver pour PVCs haute disponibilité</item>
+          <item>Intégration Stork (Storage Operator for Kubernetes) : scheduler amélioré</item>
+        </items>
+      </categorie>
+
+      <categorie nom="Capacités de sauvegarde">
+        <items>
+          <item>PX-Backup : backup namespace/application avec cohérence 3DSnap</item>
+          <item>AsyncDR : réplication asynchrone inter-cluster pour disaster recovery</item>
+          <item>Granularité : namespace, application, PVC individuel</item>
+          <item>Hooks pre/post configurables (scripts de quiescence applicative)</item>
+          <item>Intégration Velero : compatible avec l'écosystème open-source</item>
+        </items>
+      </categorie>
+
+      <categorie nom="Intégration stockage" alerte="ATTENTION">
+        <items>
+          <item>Cible backup native : S3 compatible (MinIO, AWS S3, Azure Blob, GCS)</item>
+          <item>NFS/CIFS : possible pour les cibles on-premise dont Data Domain (via NFS)</item>
+          <item>Data Domain : intégration via protocole NFS/CIFS uniquement – SANS DDBoost natif</item>
+          <item>LTO : NON supporté nativement – nécessite passerelle VTL ou solution tierce</item>
+          <item>Recommandation LTO : pipeline externe requis pour tiering LTO (ex: Veeam, script dédié)</item>
+        </items>
+      </categorie>
+
+      <categorie nom="Points de différenciation">
+        <items>
+          <item>Autopilot : gestion automatique des règles de rétention basée sur les politiques</item>
+          <item>PX-DR : RPO quasi-nul pour les applications stateful (réplication synchrone)</item>
+          <item>Intégration ArgoCD / Flux : GitOps-native pour les restaurations déclaratives</item>
+          <item>Encryption per-volume : chiffrement granulaire au niveau volume (clés par namespace)</item>
+        </items>
+      </categorie>
+
+    </categories>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="10" type="analyse">
+    <titre>Portworx PX-Backup – Analyse Points Forts / Points Faibles</titre>
+    <soustitre>Évaluation objective basée sur les fonctionnalités produit et retours terrain</soustitre>
+
+    <points_forts>
+      <item>Architecture cloud-native pure : aucun agent lourd, déploiement comme tout workload K8s</item>
+      <item>3DSnap : cohérence applicative au niveau stockage distribué sans agent dans les pods</item>
+      <item>RPO très faible : PX-DR permet une réplication quasi-synchrone pour le DR inter-cluster</item>
+      <item>Flexibilité des cibles : tout objet store S3 compatible (cloud ou on-prem) sans restriction</item>
+      <item>Intégration GitOps : restauration déclarative via ArgoCD/Flux (Infrastructure as Code)</item>
+      <item>PX-Central : gestion multi-cluster simple, tableau de bord opérationnel clair</item>
+      <item>Orientation DevOps : API-first, très populaire auprès des équipes containers modernes</item>
+      <item>Chiffrement granulaire : par volume et par namespace (conformité DORA segmentation)</item>
+    </points_forts>
+
+    <points_faibles>
+      <item critique="OUI">LTO non supporté nativement : limitation majeure pour les rétentions 10 ans. Nécessite une architecture tierce complexe (VTL + gateway + scripts)</item>
+      <item critique="OUI">Data Domain sans DDBoost : intégration via NFS uniquement, perte des optimisations de déduplication distribuée (impact réseau et stockage)</item>
+      <item>Couplage fort Portworx Storage : PX-Backup optimal uniquement avec Portworx Enterprise comme couche storage (vendor lock-in Pure Storage)</item>
+      <item>Immaturité compliance enterprise : rapports DORA moins riches, personnalisation limitée</item>
+      <item>Support LTO bande absent du roadmap officiel (focus 100% cloud / objet store)</item>
+      <item>Périmètre K8s uniquement : ne couvre pas les VMs, physique ou workloads legacy</item>
+      <item>Restauration granulaire limitée : restauration fichier à l'intérieur d'un PVC moins bien gérée</item>
+    </points_faibles>
+
+    <avertissement>L'absence de support natif LTO est un point BLOQUANT dans le contexte de cette étude (rétention 10 ans DORA). Portworx ne peut être retenu que si une solution complémentaire de tiering LTO est mise en place en parallèle.</avertissement>
+
+    <positionnement>Usage spécifique uniquement – workloads K8s pure cloud sans contrainte LTO. Non recommandé dans ce contexte DORA sans architecture hybride complémentaire.</positionnement>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="11" type="matrice">
+    <titre>Analyse Comparative – Matrice de fonctionnalités</titre>
+    <soustitre>Évaluation sur les critères clés pour un environnement OpenShift enterprise</soustitre>
+
+    <legende>
+      <niveau code="OOO">Excellent</niveau>
+      <niveau code="OO-">Bon</niveau>
+      <niveau code="O--">Partiel</niveau>
+      <niveau code="---">Non supporté</niveau>
+    </legende>
+
+    <matrice>
+      <categorie nom="Intégration Kubernetes">
+        <critere nom="Support OpenShift certifié"         netbackup="OOO" commvault="OOO" portworx="OOO"/>
+        <critere nom="Opérateur natif K8s (CRD)"         netbackup="OOO" commvault="OOO" portworx="OOO"/>
+        <critere nom="RBAC granulaire"                   netbackup="OOO" commvault="OOO" portworx="OOO"/>
+        <critere nom="Multi-cluster management"          netbackup="OOO" commvault="OOO" portworx="OOO"/>
+      </categorie>
+
+      <categorie nom="Capacités Backup">
+        <critere nom="Granularité namespace/PVC/fichier" netbackup="OOO" commvault="OOO" portworx="OO-"/>
+        <critere nom="Cohérence applicative (hooks)"    netbackup="OOO" commvault="OOO" portworx="OOO"/>
+        <critere nom="Snapshots CSI"                    netbackup="OOO" commvault="OOO" portworx="OOO"/>
+        <critere nom="Incrémentale block-level (CBT)"   netbackup="OOO" commvault="OOO" portworx="OO-"/>
+        <critere nom="Restauration granulaire (fichier)" netbackup="OOO" commvault="OOO" portworx="O--"/>
+      </categorie>
+
+      <categorie nom="Intégration Stockage">
+        <critere nom="Data Domain DDBoost natif"        netbackup="OOO" commvault="OOO" portworx="O--"/>
+        <critere nom="LTO support natif"                netbackup="OOO" commvault="OOO" portworx="---"/>
+        <critere nom="LTO WORM immuabilité bande"       netbackup="OOO" commvault="OOO" portworx="---"/>
+        <critere nom="S3 compatible (object store)"     netbackup="OO-" commvault="OO-" portworx="OOO"/>
+        <critere nom="Tiering automatique (SLP/policy)" netbackup="OOO" commvault="OOO" portworx="O--"/>
+      </categorie>
+
+      <categorie nom="Conformité et Sécurité">
+        <critere nom="Chiffrement AES-256"              netbackup="OOO" commvault="OOO" portworx="OOO"/>
+        <critere nom="Immuabilité WORM"                 netbackup="OOO" commvault="OOO" portworx="OO-"/>
+        <critere nom="Audit log complet"                netbackup="OOO" commvault="OOO" portworx="OO-"/>
+        <critere nom="Rapports compliance DORA"         netbackup="OOO" commvault="OOO" portworx="O--"/>
+        <critere nom="Analyse malware des backups"      netbackup="OO-" commvault="OOO" portworx="O--"/>
+      </categorie>
+    </matrice>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="12" type="scoring">
+    <titre>Scoring Comparatif – Note globale pondérée</titre>
+    <soustitre>Pondération basée sur les exigences DORA et les besoins opérationnels</soustitre>
+    <methodologie>Note sur 10 par critère multipliée par le poids. Score final sur 10.</methodologie>
+
+    <scoring>
+      <critere nom="Support OpenShift natif"              poids="10%" netbackup="9"  commvault="9"  portworx="9"/>
+      <critere nom="Intégration LTO (rétention 10 ans)"  poids="20%" netbackup="10" commvault="9"  portworx="2"/>
+      <critere nom="Intégration Data Domain (DDBoost)"   poids="15%" netbackup="10" commvault="10" portworx="4"/>
+      <critere nom="Granularité backup/restore K8s"      poids="12%" netbackup="9"  commvault="9"  portworx="7"/>
+      <critere nom="Conformité DORA et Compliance"       poids="15%" netbackup="9"  commvault="9"  portworx="6"/>
+      <critere nom="Sécurité WORM chiffrement audit"     poids="10%" netbackup="9"  commvault="10" portworx="7"/>
+      <critere nom="Simplicité déploiement et ops"       poids="8%"  netbackup="5"  commvault="7"  portworx="9"/>
+      <critere nom="Coût total de possession (TCO)"      poids="10%" netbackup="5"  commvault="7"  portworx="8"/>
+    </scoring>
+
+    <scores_finaux>
+      <score solution="NetBackup" note="8.6" rang="2"/>
+      <score solution="Commvault" note="8.9" rang="1"/>
+      <score solution="Portworx"  note="5.9" rang="3"/>
+    </scores_finaux>
+
+    <classement>1er Commvault (8.9/10) · 2e NetBackup (8.6/10) · 3e Portworx (5.9/10)</classement>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="13" type="conformite">
+    <titre>Conformité DORA – Mapping Exigences / Solutions</titre>
+    <soustitre>Article par article – Capacité de chaque solution à répondre aux obligations réglementaires</soustitre>
+
+    <mapping>
+      <exigence article="Art. 9 – Sécurité des données"
+                netbackup="Complet"
+                commvault="Complet"
+                portworx="Partiel"
+                commentaire="Chiffrement AES-256, contrôle d'accès RBAC, ségrégation réseau backup"/>
+
+      <exigence article="Art. 11 – Rétention 7-10 ans"
+                netbackup="LTO WORM natif"
+                commvault="LTO WORM natif"
+                portworx="Nécessite solution tierce"
+                commentaire="LTO WORM obligatoire pour 10 ans – NetBackup et Commvault natif, Portworx nécessite une architecture complémentaire"/>
+
+      <exigence article="Art. 12 – RPO/RTO définis"
+                netbackup="SLP automatisé"
+                commvault="LiveSync RPO inférieur à 15 min"
+                portworx="AsyncDR RPO configurable"
+                commentaire="Tous supportent la définition formelle des objectifs RPO/RTO avec monitoring"/>
+
+      <exigence article="Art. 13 – Tests restauration"
+                netbackup="Instant Recovery Test"
+                commvault="Test Restore documenté"
+                portworx="Validation automatisée"
+                commentaire="Tous proposent des mécanismes de test de restauration avec reporting pour audit"/>
+
+      <exigence article="Art. 17 – Incident reporting"
+                netbackup="OpsCenter alerting"
+                commvault="Alertes + SIEM intégré"
+                portworx="PX-Central alerting"
+                commentaire="Notification des incidents ICT en moins de 4h – intégrations SIEM disponibles"/>
+
+      <exigence article="Art. 25 – TLPT et résilience"
+                netbackup="DR orchestré"
+                commvault="DR + Failover testé"
+                portworx="AsyncDR inter-cluster"
+                commentaire="Capacité à simuler une perte totale de cluster et valider la restauration complète"/>
+
+      <exigence article="Art. 30 – Immuabilité backup"
+                netbackup="WORM + Catalog Lock"
+                commvault="Compliance Lock natif"
+                portworx="Object Lock S3 limité"
+                commentaire="Immuabilité des sauvegardes pour protection anti-ransomware et conformité légale"/>
+
+      <exigence article="Art. 28 – Risque tiers"
+                netbackup="Due diligence requise"
+                commvault="Due diligence requise"
+                portworx="Due diligence requise"
+                commentaire="Documentation contractuelle TPSP à établir pour les 3 solutions (SLA, audit rights)"/>
+    </mapping>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="14" type="contenu">
+    <titre>Intégration LTO et Dell EMC Data Domain</titre>
+    <soustitre>Analyse détaillée de la compatibilité stockage – Facteur différenciant majeur</soustitre>
+
+    <section nom="Dell EMC Data Domain – Rétention court et moyen terme (1 mois – 1 an)">
+
+      <solution nom="NetBackup">
+        <items>
+          <item>DDBoost via OST (OpenStorage Technology) : protocole propriétaire optimisé</item>
+          <item>Déduplication distribuée côté client (réduction trafic 50 à 80%)</item>
+          <item>Vérification d'intégrité inline et optimized duplication</item>
+          <item>Support DD Retention Lock : immuabilité sur Data Domain</item>
+          <item>Configuration SLP (Storage Lifecycle Policy) pour expiration automatique</item>
+        </items>
+      </solution>
+
+      <solution nom="Commvault">
+        <items>
+          <item>DDBoost natif intégré dans le MediaAgent Commvault</item>
+          <item>Déduplication globale cross-clients : réduction maximale des données</item>
+          <item>DD Boost for OpenStorage : vérification et optimisation réseau</item>
+          <item>Auxiliaire Copy automatique vers LTO depuis DD (workflow unifié)</item>
+          <item>Support DD Retention Lock Compliance et Governance</item>
+        </items>
+      </solution>
+
+      <solution nom="Portworx" alerte="OUI">
+        <items>
+          <item>ATTENTION : PAS de support DDBoost natif</item>
+          <item>Intégration via NFS/CIFS uniquement (protocole générique)</item>
+          <item>Perte des optimisations DDBoost (dédup côté client, transfert accéléré)</item>
+          <item>Consommation réseau et stockage supérieure aux solutions précédentes</item>
+          <item>Fonctionnel mais sous-optimal pour les grandes volumétries</item>
+        </items>
+      </solution>
+
+    </section>
+
+    <section nom="Bibliothèque LTO – Rétention long terme (3 ans – 10 ans) – Conformité DORA Art. 11">
+
+      <solution nom="NetBackup">
+        <items>
+          <item>Support natif bibliothèques LTO physiques et VTL</item>
+          <item>SLP : tiering automatique Data Domain vers LTO selon âge des données</item>
+          <item>WORM sur bande LTO certifié (NetBackup Vault option)</item>
+          <item>Chiffrement matériel LTO-9 AES-256 géré par NetBackup</item>
+          <item>Barcode management et slot tracking automatique</item>
+        </items>
+      </solution>
+
+      <solution nom="Commvault">
+        <items>
+          <item>Support natif bibliothèques LTO via MediaAgent</item>
+          <item>Auxiliaire Copy automatique DD vers LTO (règles de rétention)</item>
+          <item>WORM natif sur cartouches LTO-WORM (Compliance et Governance)</item>
+          <item>Chiffrement LTO matériel ou logiciel (clé par cartouche)</item>
+          <item>Gestion inventaire et export bandes hors-site (Vault)</item>
+        </items>
+      </solution>
+
+      <solution nom="Portworx" alerte="OUI">
+        <items>
+          <item>NON SUPPORTÉ NATIVEMENT</item>
+          <item>Aucun pilote bibliothèque LTO dans PX-Backup</item>
+          <item>Contournement : VTL (Virtual Tape Library) en intermédiaire</item>
+          <item>Alternative : solution tierce de tiering (Veeam, NetBackup) en parallèle</item>
+          <item>Architecture complexe et coût supplémentaire significatif</item>
+        </items>
+      </solution>
+
+    </section>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="15" type="recommandation">
+    <titre>Recommandation et Plan d'action</titre>
+    <soustitre>Synthèse de l'analyse comparative – Choix recommandé selon les contraintes DORA</soustitre>
+
+    <recommandation_principale rang="1">
+      <solution>Commvault Complete for Kubernetes</solution>
+      <score>8.9 / 10</score>
+      <justification>Meilleur équilibre fonctionnalités / conformité DORA / TCO. Intégration LTO et DDBoost nativement. Compliance Lock anti-ransomware. Plateforme unifiée VMs + K8s + SaaS.</justification>
+    </recommandation_principale>
+
+    <recommandation_alternative rang="2">
+      <solution>Veritas NetBackup</solution>
+      <score>8.6 / 10</score>
+      <justification>Recommandé si l'équipe dispose d'expertise NetBackup existante ou si l'environnement est très hétérogène (nombreux systèmes legacy). Intégration LTO la plus mature du marché.</justification>
+    </recommandation_alternative>
+
+    <cas_usage_specifique rang="3">
+      <solution>Portworx PX-Backup</solution>
+      <score>5.9 / 10</score>
+      <justification>À retenir uniquement pour des workloads K8s pure cloud sans contrainte LTO. Non recommandé dans ce contexte DORA (rétention 10 ans LTO) sans architecture hybride complémentaire.</justification>
+    </cas_usage_specifique>
+
+    <plan_action>
+      <phase numero="1" periode="J0 à J30">
+        <actions>
+          <action>Cadrer les exigences RPO/RTO par namespace/application avec les équipes métier</action>
+          <action>Inventorier les PVCs et volumes à protéger (volumétrie, fréquence de changement)</action>
+          <action>Réaliser un PoC Commvault (ou NetBackup) sur un cluster de qualification OpenShift</action>
+        </actions>
+      </phase>
+      <phase numero="2" periode="J30 à J90">
+        <actions>
+          <action>Déployer l'opérateur Kubernetes en production (namespace par namespace)</action>
+          <action>Configurer les cibles Data Domain (DDBoost) et les SLA par tier de données</action>
+          <action>Implémenter les règles de tiering automatique Data Domain vers LTO selon rétention DORA</action>
+        </actions>
+      </phase>
+      <phase numero="3" periode="J90 à J180">
+        <actions>
+          <action>Tester et documenter les procédures de restauration (Art. 13 DORA)</action>
+          <action>Former les équipes Ops, rédiger les runbooks de restauration d'urgence</action>
+          <action>Produire les premiers rapports de conformité DORA et planifier les audits périodiques</action>
+        </actions>
+      </phase>
+    </plan_action>
+  </slide>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <slide numero="16" type="conclusion">
+    <titre>Conclusion</titre>
+    <soustitre>Synthèse de l'étude comparative</soustitre>
+
+    <points_cles>
+      <point>Commvault s'impose comme la solution la mieux adaptée : intégration DDBoost et LTO native, Compliance Lock, rapports DORA, et plateforme unifiée.</point>
+      <point>NetBackup reste une alternative solide pour les environnements disposant d'une expertise existante et d'architectures très hétérogènes.</point>
+      <point>Portworx est disqualifié dans ce contexte précis en raison de l'absence de support LTO natif, condition sine qua non de la rétention 10 ans DORA.</point>
+      <point>L'intégration Data Domain via DDBoost est un pré-requis fonctionnel : NetBackup et Commvault la supportent nativement ; Portworx ne la supporte pas.</point>
+      <point>La conformité DORA impose des tests de restauration documentés, une immuabilité WORM et un chiffrement AES-256 – couverts par les deux solutions retenues.</point>
+    </points_cles>
+
+    <prochaine_etape>PoC Commvault sur cluster de qualification OpenShift</prochaine_etape>
+  </slide>
+
+</presentation>
