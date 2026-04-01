@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Étude Comparative – Backup Kubernetes / OpenShift</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');
+
+:root {
+  --navy:   #0D1B4B;
+  --blue:   #1A3A8F;
+  --lblue:  #2E5FD9;
+  --ice:    #D6E4FF;
+  --gold:   #F5A623;
+  --white:  #FFFFFF;
+  --offwh:  #F4F7FD;
+  --dark:   #1A2040;
+  --gray:   #5C6680;
+  --lightg: #E8EDF8;
+  --green:  #1A7A4A;
+  --red:    #C0392B;
+  --orange: #D4720B;
+  --netbk:  #0066CC;
+  --comv:   #1F6FEB;
+  --portx:  #7B2FBE;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  font-family: 'DM Sans', sans-serif;
+  background: #0a0f1e;
+  overflow: hidden;
+}
+
+/* ── SHELL ─────────────────────────────────────────── */
+#shell {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+}
+
+/* ── TOP BAR ──────────────────────────────────────── */
+#topbar {
+  height: 40px; flex-shrink: 0;
+  background: rgba(13,27,75,0.95);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(245,166,35,0.3);
+  display: flex; align-items: center;
+  padding: 0 16px; gap: 12px;
+  z-index: 100;
+}
+#topbar .brand {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 700;
+  color: var(--gold); letter-spacing: 2px;
+  text-transform: uppercase; white-space: nowrap;
+}
+#topbar .sep { flex: 1; }
+#topbar .slide-counter {
+  font-size: 11px; color: var(--ice); opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+/* progress bar */
+#progress-bar {
+  position: absolute; bottom: 0; left: 0;
+  height: 2px; background: var(--gold);
+  transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ── STAGE ────────────────────────────────────────── */
+#stage {
+  flex: 1; position: relative; overflow: hidden;
+}
+
+/* ── SLIDES ───────────────────────────────────────── */
+.slide {
+  position: absolute; inset: 0;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.4,0,0.2,1);
+  transform: translateX(60px);
+  overflow-y: auto;
+  padding: 32px 48px 80px;
+}
+.slide.active {
+  opacity: 1; pointer-events: all;
+  transform: translateX(0);
+}
+.slide.prev {
+  transform: translateX(-60px);
+}
+
+/* Dark slides */
+.slide-dark {
+  background: var(--navy);
+  background-image:
+    radial-gradient(ellipse at 80% 50%, rgba(46,95,217,0.15) 0%, transparent 60%),
+    radial-gradient(ellipse at 10% 80%, rgba(245,166,35,0.08) 0%, transparent 50%);
+}
+
+/* Light slides */
+.slide-light {
+  background: var(--offwh);
+  background-image:
+    radial-gradient(ellipse at 90% 10%, rgba(46,95,217,0.06) 0%, transparent 50%);
+}
+
+/* ── SLIDE HEADER ─────────────────────────────────── */
+.slide-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--gold);
+}
+.slide-header .label {
+  font-family: 'Syne', sans-serif;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 3px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 6px;
+}
+.slide-header h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px; font-weight: 800;
+  color: var(--dark); line-height: 1.2;
+}
+.slide-header .sub {
+  font-size: 12px; color: var(--gray);
+  margin-top: 4px; font-style: italic;
+}
+.slide-light .slide-header h2 { color: var(--dark); }
+.slide-dark .slide-header h2  { color: var(--white); }
+.slide-dark .slide-header .sub { color: var(--ice); opacity: 0.7; }
+.slide-dark .slide-header { border-color: rgba(245,166,35,0.5); }
+
+/* ── TYPOGRAPHY ───────────────────────────────────── */
+h1 { font-family: 'Syne', sans-serif; }
+h3 { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; }
+
+/* ── CARDS GRID ───────────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+
+.card {
+  background: var(--white);
+  border-radius: 8px;
+  border: 1px solid var(--lightg);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  overflow: hidden;
+}
+.card-header {
+  padding: 10px 14px;
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 700;
+  color: var(--white);
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.card-body { padding: 12px 14px; }
+.card-body ul { list-style: none; padding: 0; }
+.card-body ul li {
+  font-size: 11.5px; color: var(--dark);
+  padding: 4px 0 4px 14px;
+  position: relative;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  line-height: 1.5;
+}
+.card-body ul li:last-child { border-bottom: none; }
+.card-body ul li::before {
+  content: '›';
+  position: absolute; left: 0;
+  color: var(--lblue); font-weight: 700;
+}
+
+/* ── SECTION BAND ─────────────────────────────────── */
+.band {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--white);
+  margin-bottom: 12px;
+}
+
+/* ── TABLE ────────────────────────────────────────── */
+.data-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 11.5px;
+  border-radius: 8px; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+.data-table th {
+  background: var(--navy);
+  color: var(--white);
+  padding: 10px 12px;
+  font-family: 'Syne', sans-serif;
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+  text-align: left;
+}
+.data-table th.nb  { background: var(--netbk); }
+.data-table th.cv  { background: var(--comv); }
+.data-table th.px  { background: var(--portx); }
+.data-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--lightg);
+  color: var(--dark);
+  vertical-align: middle;
+}
+.data-table tr:nth-child(even) td { background: rgba(232,237,248,0.4); }
+.data-table tr.cat-row td {
+  background: #3A4A70 !important;
+  color: var(--white);
+  font-family: 'Syne', sans-serif;
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+  padding: 7px 12px;
+}
+.data-table td.center { text-align: center; }
+.data-table td.bold   { font-weight: 700; }
+
+/* ── SCORE DOTS ───────────────────────────────────── */
+.dot-excellent { color: #1A7A4A; font-weight: 800; font-size: 14px; }
+.dot-bon       { color: #2E5FD9; font-weight: 800; font-size: 14px; }
+.dot-partiel   { color: #D4720B; font-weight: 800; font-size: 14px; }
+.dot-non       { color: #C0392B; font-weight: 800; font-size: 14px; }
+
+.score-high  { color: #1A7A4A; font-weight: 700; }
+.score-mid   { color: #2E5FD9; font-weight: 700; }
+.score-low   { color: #C0392B; font-weight: 700; }
+
+/* ── PROS / CONS ──────────────────────────────────── */
+.pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+.pros-box, .cons-box {
+  border-radius: 8px; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+.pros-box { border: 1.5px solid var(--green); }
+.cons-box { border: 1.5px solid var(--red); }
+
+.pros-header {
+  background: var(--green); color: var(--white);
+  padding: 10px 14px;
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.cons-header {
+  background: var(--red); color: var(--white);
+  padding: 10px 14px;
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.pros-body, .cons-body {
+  background: var(--white);
+  padding: 12px 14px;
+}
+.pros-body ul, .cons-body ul { list-style: none; padding: 0; }
+.pros-body li, .cons-body li {
+  font-size: 11.5px; padding: 5px 0 5px 20px;
+  position: relative;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  line-height: 1.5; color: var(--dark);
+}
+.pros-body li:last-child, .cons-body li:last-child { border-bottom: none; }
+.pros-body li::before { content: '✔'; position: absolute; left: 0; color: var(--green); font-size: 11px; }
+.cons-body li::before { content: '✘'; position: absolute; left: 0; color: var(--red); font-size: 11px; }
+.cons-body li.critical::before { content: '⚠'; color: var(--orange); }
+
+.note-box {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #FFF8E7;
+  border-left: 4px solid var(--gold);
+  font-size: 11.5px; color: var(--dark);
+  font-style: italic; line-height: 1.5;
+}
+.note-box.warn { background: #FEF0F0; border-color: var(--red); }
+
+/* ── DORA ARTICLE BADGE ───────────────────────────── */
+.art-badge {
+  display: inline-block;
+  background: var(--navy);
+  color: var(--gold);
+  font-family: 'Syne', sans-serif;
+  font-size: 9px; font-weight: 700;
+  padding: 3px 8px; border-radius: 4px;
+  text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+/* ── DORA GRID ────────────────────────────────────── */
+.dora-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.dora-card {
+  background: var(--white); border-radius: 8px;
+  overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+}
+.dora-card-header {
+  background: var(--navy); padding: 10px 14px;
+}
+.dora-card-header .art { color: var(--gold); font-size: 10px; font-weight: 700; font-family: 'Syne', sans-serif; }
+.dora-card-header .tit { color: var(--white); font-size: 12px; font-weight: 700; font-family: 'Syne', sans-serif; }
+.dora-card ul { list-style: none; padding: 12px 14px; margin: 0; }
+.dora-card ul li {
+  font-size: 11px; color: var(--dark);
+  padding: 4px 0 4px 14px;
+  position: relative;
+  border-bottom: 1px solid var(--lightg);
+  line-height: 1.5;
+}
+.dora-card ul li:last-child { border-bottom: none; }
+.dora-card ul li::before { content: '›'; position: absolute; left: 0; color: var(--gold); font-weight: 700; }
+
+/* ── SOMMAIRE ─────────────────────────────────────── */
+.sommaire-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.som-item {
+  display: flex; align-items: stretch;
+  background: var(--white); border-radius: 8px;
+  overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  border: 1px solid var(--lightg);
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+.som-item:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+.som-num {
+  width: 52px; flex-shrink: 0;
+  background: var(--navy);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Syne', sans-serif;
+  font-size: 16px; font-weight: 800;
+  color: var(--gold);
+}
+.som-content { padding: 12px 14px; }
+.som-content .som-title { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; color: var(--dark); }
+.som-content .som-desc  { font-size: 11px; color: var(--gray); margin-top: 3px; }
+
+/* ── ARCHITECTURE TIERS ───────────────────────────── */
+.tier-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; align-items: center; margin-bottom: 16px; }
+.tier-card { border-radius: 8px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+.tier-arrow {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 0 12px; color: var(--gray);
+  font-size: 22px;
+}
+.tier-arrow span { font-size: 9px; color: var(--gray); margin-bottom: 4px; }
+
+/* ── RECOMMANDATION ───────────────────────────────── */
+.reco-main {
+  background: linear-gradient(135deg, #EBF3FF 0%, #F0F8FF 100%);
+  border: 2px solid var(--lblue);
+  border-radius: 10px; padding: 16px 20px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 16px rgba(46,95,217,0.12);
+}
+.reco-main .badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--lblue); color: var(--white);
+  font-family: 'Syne', sans-serif;
+  font-size: 10px; font-weight: 700;
+  padding: 4px 12px; border-radius: 20px;
+  text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.reco-main h3 { font-size: 16px; color: var(--dark); margin-bottom: 6px; }
+.reco-main p  { font-size: 12px; color: var(--dark); line-height: 1.6; }
+
+.reco-alt { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.reco-card {
+  background: var(--white); border-radius: 8px;
+  overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+  display: flex;
+}
+.reco-card .reco-stripe { width: 5px; flex-shrink: 0; }
+.reco-card .reco-txt { padding: 12px 14px; }
+.reco-card .reco-txt h4 { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; color: var(--dark); margin-bottom: 4px; }
+.reco-card .reco-txt p  { font-size: 11px; color: var(--dark); line-height: 1.5; }
+
+/* ── PHASE CARDS ──────────────────────────────────── */
+.phase-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.phase-card { background: var(--white); border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.07); }
+.phase-header { padding: 10px 14px; color: var(--white); font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; }
+.phase-body { padding: 12px 14px; }
+.phase-body ul { list-style: none; padding: 0; }
+.phase-body li { font-size: 11px; color: var(--dark); padding: 5px 0 5px 14px; position: relative; border-bottom: 1px solid var(--lightg); line-height: 1.5; }
+.phase-body li:last-child { border-bottom: none; }
+.phase-body li::before { content: '→'; position: absolute; left: 0; color: var(--gold); font-size: 10px; font-weight: 700; }
+
+/* ── TITLE SLIDE ──────────────────────────────────── */
+#slide-1 {
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 48px 64px;
+}
+#slide-1 .pre-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 4px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 16px;
+}
+#slide-1 h1 {
+  font-size: 42px; font-weight: 800;
+  color: var(--white); line-height: 1.1;
+  margin-bottom: 8px;
+}
+#slide-1 .accent-line {
+  width: 80px; height: 3px;
+  background: var(--gold); margin: 20px 0;
+}
+#slide-1 .solutions {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+#slide-1 .sol-badge {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 600;
+  color: var(--white);
+  border: 1px solid rgba(255,255,255,0.3);
+}
+#slide-1 .storage-line {
+  font-size: 13px; color: var(--ice); opacity: 0.8;
+  margin-bottom: 6px;
+}
+#slide-1 .dora-line {
+  font-size: 12px; color: rgba(214,228,255,0.6);
+  font-style: italic; margin-top: 20px;
+}
+#slide-1 .deco-block {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 280px;
+  background: linear-gradient(135deg, rgba(46,95,217,0.3), rgba(123,47,190,0.15));
+  clip-path: polygon(30% 0, 100% 0, 100% 100%, 0% 100%);
+  pointer-events: none;
+}
+
+/* ── CONCLUSION SLIDE ─────────────────────────────── */
+#slide-16 {
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 48px 64px;
+}
+#slide-16 .conc-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 4px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 12px;
+}
+#slide-16 h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px; font-weight: 800;
+  color: var(--white); margin-bottom: 8px;
+}
+#slide-16 .conc-sub {
+  font-size: 13px; color: var(--ice); opacity: 0.7;
+  margin-bottom: 28px;
+}
+#slide-16 .accent-line {
+  width: 60px; height: 2px;
+  background: var(--gold); margin-bottom: 24px;
+}
+.conc-points { list-style: none; padding: 0; }
+.conc-points li {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-size: 13px; color: var(--white); line-height: 1.6;
+}
+.conc-points li:last-child { border-bottom: none; }
+.conc-points li .bullet {
+  width: 22px; height: 22px; flex-shrink: 0;
+  background: var(--gold); border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: var(--navy);
+  margin-top: 2px;
+}
+#slide-16 .next-step {
+  margin-top: 20px; padding: 12px 18px;
+  background: rgba(245,166,35,0.1);
+  border: 1px solid rgba(245,166,35,0.4);
+  border-radius: 6px;
+  font-family: 'Syne', sans-serif;
+  font-size: 12px; font-weight: 700;
+  color: var(--gold);
+}
+
+/* ── BOTTOM NAV ───────────────────────────────────── */
+#botnav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: 44px;
+  background: rgba(10,15,30,0.92);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; z-index: 100;
+}
+.nav-btn {
+  padding: 7px 20px;
+  background: rgba(46,95,217,0.2);
+  border: 1px solid rgba(46,95,217,0.4);
+  color: var(--ice); font-family: 'Syne', sans-serif;
+  font-size: 11px; font-weight: 600;
+  border-radius: 4px; cursor: pointer;
+  transition: all 0.2s; user-select: none;
+  letter-spacing: 0.5px;
+}
+.nav-btn:hover { background: rgba(46,95,217,0.5); border-color: var(--lblue); color: var(--white); }
+.nav-btn:disabled { opacity: 0.3; cursor: default; }
+.nav-btn.primary {
+  background: var(--gold); color: var(--navy);
+  border-color: var(--gold);
+}
+.nav-btn.primary:hover { background: #ffc044; }
+
+/* dot nav */
+#dot-nav {
+  display: flex; gap: 5px; align-items: center;
+  max-width: 320px; flex-wrap: wrap;
+}
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  cursor: pointer; transition: all 0.2s;
+}
+.dot.active { background: var(--gold); transform: scale(1.4); }
+.dot:hover  { background: rgba(255,255,255,0.5); }
+
+/* ── HIGHLIGHT / WARNING ──────────────────────────── */
+.warn-inline {
+  display: inline-block;
+  background: #FFF3E0;
+  color: var(--orange);
+  border-left: 3px solid var(--orange);
+  padding: 8px 12px; border-radius: 0 4px 4px 0;
+  font-size: 11.5px; margin-top: 10px; width: 100%;
+  line-height: 1.5;
+}
+
+/* ── STORAGE COMPARISON COLUMNS ───────────────────── */
+.stor-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+/* ── DORA STATUS BADGES ───────────────────────────── */
+.s-ok      { color: #1A7A4A; font-weight: 700; font-size: 10.5px; }
+.s-partial { color: #D4720B; font-weight: 700; font-size: 10.5px; }
+.s-no      { color: #C0392B; font-weight: 700; font-size: 10.5px; }
+
+/* ── SCORE FINAL ROW ──────────────────────────────── */
+.score-final td { font-weight: 800 !important; font-size: 13px !important; }
+
+/* ── LEGEND BAR ───────────────────────────────────── */
+.legend-bar {
+  display: flex; gap: 16px; align-items: center;
+  background: var(--white);
+  border-radius: 6px; padding: 8px 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--lightg);
+  font-size: 11px;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+
+/* Scrollbar */
+.slide::-webkit-scrollbar { width: 4px; }
+.slide::-webkit-scrollbar-track { background: transparent; }
+.slide::-webkit-scrollbar-thumb { background: rgba(245,166,35,0.3); border-radius: 2px; }
+
+/* Print */
+@media print {
+  #topbar, #botnav { display: none; }
+  .slide { position: relative; opacity: 1; transform: none; pointer-events: all; break-inside: avoid; page-break-after: always; }
+  #stage { overflow: visible; height: auto; }
+  html, body { overflow: auto; height: auto; }
+}
+</style>
+</head>
+<body>
+
+<div id="shell">
+
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <div class="brand">Backup K8s / OpenShift</div>
+    <div class="sep"></div>
+    <div class="slide-counter"><span id="cur">1</span> / <span id="tot">16</span></div>
+    <div id="progress-bar" style="width:6.25%"></div>
+  </div>
+
+  <!-- STAGE -->
+  <div id="stage">
+
+    <!-- ═══════════════════════════════════ SLIDE 1 – TITRE -->
+    <div class="slide slide-dark active" id="slide-1">
+      <div class="deco-block"></div>
+      <div class="pre-label">Étude Comparative</div>
+      <h1>Solutions de Sauvegarde<br>Kubernetes / OpenShift</h1>
+      <div class="accent-line"></div>
+      <div class="solutions">
+        <span class="sol-badge" style="background:rgba(0,102,204,0.6)">Veritas NetBackup</span>
+        <span class="sol-badge" style="background:rgba(31,111,235,0.6)">Commvault</span>
+        <span class="sol-badge" style="background:rgba(123,47,190,0.6)">Portworx PX-Backup</span>
+      </div>
+      <p class="storage-line">📼 LTO (rétention 10 ans) &nbsp;·&nbsp; 💿 Dell EMC Data Domain (1 mois – 1 an)</p>
+      <p class="dora-line">Conformité DORA – RGPD – Exigences Secteur Financier &nbsp;|&nbsp; Mars 2025</p>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 2 – SOMMAIRE -->
+    <div class="slide slide-light" id="slide-2">
+      <div class="slide-header">
+        <div class="label">Navigation</div>
+        <h2>Sommaire</h2>
+        <div class="sub">Structure de l'étude comparative</div>
+      </div>
+      <div class="sommaire-grid">
+        <div class="som-item" onclick="goTo(3)"><div class="som-num">01</div><div class="som-content"><div class="som-title">Cadre réglementaire</div><div class="som-desc">Exigences DORA, RPO/RTO, politiques de sauvegarde</div></div></div>
+        <div class="som-item" onclick="goTo(4)"><div class="som-num">02</div><div class="som-content"><div class="som-title">Architecture cible</div><div class="som-desc">LTO pour 10 ans · Data Domain 1 mois–1 an · Topologie</div></div></div>
+        <div class="som-item" onclick="goTo(5)"><div class="som-num">03</div><div class="som-content"><div class="som-title">Veritas NetBackup for Kubernetes</div><div class="som-desc">Fonctionnalités, intégrations, points forts et faibles</div></div></div>
+        <div class="som-item" onclick="goTo(7)"><div class="som-num">04</div><div class="som-content"><div class="som-title">Commvault Complete for Kubernetes</div><div class="som-desc">Fonctionnalités, intégrations, points forts et faibles</div></div></div>
+        <div class="som-item" onclick="goTo(9)"><div class="som-num">05</div><div class="som-content"><div class="som-title">Portworx PX-Backup</div><div class="som-desc">Fonctionnalités, intégrations, points forts et faibles</div></div></div>
+        <div class="som-item" onclick="goTo(11)"><div class="som-num">06</div><div class="som-content"><div class="som-title">Analyse comparative</div><div class="som-desc">Matrice de fonctionnalités · Scoring pondéré</div></div></div>
+        <div class="som-item" onclick="goTo(13)"><div class="som-num">07</div><div class="som-content"><div class="som-title">Conformité DORA</div><div class="som-desc">Mapping exigences / solutions article par article</div></div></div>
+        <div class="som-item" onclick="goTo(15)"><div class="som-num">08</div><div class="som-content"><div class="som-title">Recommandation et Conclusion</div><div class="som-desc">Synthèse, critères de choix, plan d'action</div></div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 3 – DORA -->
+    <div class="slide slide-light" id="slide-3">
+      <div class="slide-header">
+        <div class="label">Réglementation</div>
+        <h2>Cadre réglementaire DORA</h2>
+        <div class="sub">Digital Operational Resilience Act – Règlement UE 2022/2554 – En vigueur depuis janvier 2025</div>
+      </div>
+      <div class="dora-grid">
+        <div class="dora-card">
+          <div class="dora-card-header"><div class="art">Art. 9 & 12</div><div class="tit">Protection & Continuité</div></div>
+          <ul>
+            <li>Politique documentée de sauvegarde (RPO/RTO formalisés)</li>
+            <li>Tests périodiques obligatoires des procédures de restauration</li>
+            <li>Chiffrement des données en transit et au repos</li>
+            <li>Ségrégation des sauvegardes (isolées du réseau de production)</li>
+          </ul>
+        </div>
+        <div class="dora-card">
+          <div class="dora-card-header"><div class="art">Art. 11</div><div class="tit">Politiques de rétention</div></div>
+          <ul>
+            <li>Rétention minimale 7 ans pour les établissements financiers</li>
+            <li>Immutabilité des sauvegardes (protection anti-ransomware)</li>
+            <li>Traçabilité des accès aux données sauvegardées (audit log)</li>
+            <li>Support des supports longue durée (LTO WORM, stockage immuable)</li>
+          </ul>
+        </div>
+        <div class="dora-card">
+          <div class="dora-card-header"><div class="art">Art. 13 & 25</div><div class="tit">Tests de résilience</div></div>
+          <ul>
+            <li>TLPT (Threat Led Penetration Testing) annuel obligatoire</li>
+            <li>Tests de restauration documentés et validés trimestriellement</li>
+            <li>BCP/DRP incluant les workloads Kubernetes</li>
+            <li>Simulations de sinistre incluant perte totale d'un cluster</li>
+          </ul>
+        </div>
+        <div class="dora-card">
+          <div class="dora-card-header"><div class="art">Art. 28-44</div><div class="tit">Risque tiers & reporting</div></div>
+          <ul>
+            <li>Due diligence sur les fournisseurs de solutions de backup</li>
+            <li>Contrats TPSP avec SLA backup formalisés</li>
+            <li>Notification incidents ICT &lt; 4h (initial), &lt; 24h (intermédiaire)</li>
+            <li>Registre des dépendances critiques tiers</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 4 – ARCHITECTURE -->
+    <div class="slide slide-light" id="slide-4">
+      <div class="slide-header">
+        <div class="label">Infrastructure</div>
+        <h2>Architecture cible de sauvegarde</h2>
+        <div class="sub">LTO (rétention 10 ans) + Dell EMC Data Domain (1 mois – 1 an)</div>
+      </div>
+      <div class="tier-grid" style="margin-bottom:18px">
+        <div class="tier-card">
+          <div class="card-header" style="background:var(--lblue)">🖴 TIER 1 – DISK (Court / Moyen terme)</div>
+          <div class="card-body">
+            <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;margin-bottom:8px;color:var(--dark)">Dell EMC Data Domain</div>
+            <ul>
+              <li>Déduplication globale jusqu'à 65:1 (DDBoost)</li>
+              <li>Rétention : 1 mois (logs) → 12 mois (données métier)</li>
+              <li>Protocoles : DDBoost, NFS, CIFS, S3 compatible, OST</li>
+            </ul>
+          </div>
+        </div>
+        <div class="tier-arrow"><span>Tiering</span>→</div>
+        <div class="tier-card">
+          <div class="card-header" style="background:var(--orange)">📼 TIER 2 – BANDE (Long terme)</div>
+          <div class="card-body">
+            <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;margin-bottom:8px;color:var(--dark)">Bibliothèque LTO (LTO-8/9)</div>
+            <ul>
+              <li>Capacité native LTO-9 : 18 TB/cartouche (45 TB compressé)</li>
+              <li>Rétention : 3 ans → 10 ans (conformité DORA / fiscale)</li>
+              <li>WORM (non réinscriptibles) + chiffrement AES-256</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div style="background:#F0F4FF;border-radius:6px;padding:8px 14px;margin-bottom:16px;font-size:11.5px;color:var(--dark)">
+        <strong>Sources :</strong> Cluster OpenShift (Production) — Namespaces / PVCs / ETCD / ConfigMaps / Secrets / CRDs / Helm Releases
+      </div>
+      <div class="band" style="background:var(--navy)">Matrice de rétention recommandée</div>
+      <table class="data-table">
+        <thead><tr><th>Type de données</th><th>Fréquence</th><th>Rétention Data Domain</th><th>Rétention LTO</th></tr></thead>
+        <tbody>
+          <tr><td>Manifests K8s / Config</td><td>Quotidien</td><td>3 mois</td><td>7 ans (DORA)</td></tr>
+          <tr><td>Volumes persistants (PVC)</td><td>Quotidien / Horaire</td><td>1 mois (incrémentiel)</td><td>3 ans</td></tr>
+          <tr><td>ETCD cluster</td><td>Toutes les 6h</td><td>1 mois</td><td>1 an</td></tr>
+          <tr><td>Données applicatives critiques</td><td>Quotidien</td><td>6 mois</td><td>10 ans</td></tr>
+          <tr><td>Logs opérationnels</td><td>Quotidien</td><td>1 mois</td><td>7 ans (réglementaire)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 5 – NETBACKUP FONCTIONNALITÉS -->
+    <div class="slide slide-light" id="slide-5">
+      <div class="slide-header">
+        <div class="label" style="color:var(--netbk)">Veritas Technologies</div>
+        <h2>Veritas NetBackup for Kubernetes</h2>
+        <div class="sub">Solution enterprise – Opérateur natif Kubernetes – Intégration Data Domain & LTO</div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-header" style="background:var(--netbk)">Déploiement & Intégration K8s</div><div class="card-body"><ul>
+          <li>Opérateur Kubernetes natif (Helm chart + CRDs)</li>
+          <li>Support OpenShift 4.x certifié Red Hat</li>
+          <li>RBAC granulaire par namespace</li>
+          <li>Découverte automatique namespaces & PVCs</li>
+          <li>API REST pour orchestration et automatisation</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--netbk)">Capacités de sauvegarde</div><div class="card-body"><ul>
+          <li>Backup au niveau namespace, label selector, application</li>
+          <li>Cohérence application-aware (hooks pre/post)</li>
+          <li>Support snapshots CSI (Container Storage Interface)</li>
+          <li>Sauvegarde incrémentale block-level (BLIB) pour PVCs</li>
+          <li>Copie de catalogue chiffrée pour reprise catalogue</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--green)">Intégration stockage LTO & Data Domain</div><div class="card-body"><ul>
+          <li>Data Domain via OST (OpenStorage Technology) — DDBoost natif</li>
+          <li>LTO via Media Server — support WORM, chiffrement AES-256</li>
+          <li>CloudCatalyst pour staging vers S3 avant LTO</li>
+          <li>MSDP (Media Server Deduplication Pool) en alternative DD</li>
+          <li>Multi-target DD + LTO simultanément via SLP</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--orange)">Reporting & Compliance</div><div class="card-body"><ul>
+          <li>OpsCenter : tableau de bord centralisé multi-cluster</li>
+          <li>Rapports conformité DORA (rétention, chiffrement, tests)</li>
+          <li>Audit log complet sauvegarde / restauration</li>
+          <li>Alertes proactives (échec job, quota, expiration)</li>
+        </ul></div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 6 – NETBACKUP PROS/CONS -->
+    <div class="slide slide-light" id="slide-6">
+      <div class="slide-header">
+        <div class="label" style="color:var(--netbk)">Veritas NetBackup</div>
+        <h2>Analyse Points Forts / Points Faibles</h2>
+        <div class="sub">Évaluation objective basée sur les fonctionnalités produit et retours terrain</div>
+      </div>
+      <div class="pros-cons">
+        <div class="pros-box">
+          <div class="pros-header">✔ Points forts</div>
+          <div class="pros-body"><ul>
+            <li>Maturité produit : +30 ans d'expérience enterprise, référence secteur financier</li>
+            <li>Intégration LTO la plus complète : SLP gère automatiquement le tiering DD → LTO</li>
+            <li>DDBoost natif : déduplication côté client, réduction trafic réseau 50–80%</li>
+            <li>Granularité fine : restauration fichier, namespace, PVC, manifeste individuel</li>
+            <li>Multi-cloud : AWS S3, Azure Blob, GCS + LTO (flexibilité cible)</li>
+            <li>Chiffrement AES-256 en transit et au repos (exigence DORA Art. 9)</li>
+            <li>SLA & support enterprise : 24/7, certifications FIPS 140-2</li>
+            <li>Catalogue répliqué : survie à la perte complète du master server</li>
+          </ul></div>
+        </div>
+        <div class="cons-box">
+          <div class="cons-header">✘ Points faibles</div>
+          <div class="cons-body"><ul>
+            <li>Complexité de déploiement : architecture multi-composants (Master, Media Servers, Client)</li>
+            <li>Coût de licence élevé : modèle FETB + options coûteuses (Kubernetes Add-on, CloudCatalyst)</li>
+            <li>Interface utilisateur vieillissante : Web UI améliorée mais inférieure aux concurrents cloud-native</li>
+            <li>Agilité Kubernetes limitée : conçu pour VMs/physique, support K8s en add-on</li>
+            <li>Footprint important : consommation ressources significative dans le cluster</li>
+            <li>Cycles de release longs comparés aux outils cloud-native</li>
+            <li>Courbe d'apprentissage élevée pour les équipes DevOps</li>
+          </ul></div>
+        </div>
+      </div>
+      <div class="note-box">Positionnement : Solution de référence pour les environnements enterprise hybrides nécessitant une intégration LTO et Data Domain éprouvée. Recommandée pour les DSI matures avec équipes backup dédiées.</div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 7 – COMMVAULT FONCTIONNALITÉS -->
+    <div class="slide slide-light" id="slide-7">
+      <div class="slide-header">
+        <div class="label" style="color:var(--comv)">Commvault Systems</div>
+        <h2>Commvault Complete Backup &amp; Recovery for Kubernetes</h2>
+        <div class="sub">Plateforme unifiée – Protection données exhaustive – DDBoost natif</div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-header" style="background:var(--comv)">Déploiement & Intégration K8s</div><div class="card-body"><ul>
+          <li>Opérateur Kubernetes via Helm chart (déploiement simplifié)</li>
+          <li>Certifié Red Hat OpenShift 4.x (catalogue OperatorHub)</li>
+          <li>MediaAgent déployable comme pod dans le cluster</li>
+          <li>Support multi-cluster depuis une console unique (Command Center)</li>
+          <li>RBAC natif, intégration LDAP/AD/SAML</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--comv)">Capacités de sauvegarde</div><div class="card-body"><ul>
+          <li>Granularité : cluster, namespace, application, pod, PVC, fichier</li>
+          <li>IntelliSnap : snapshots CSI (NetApp, Pure Storage, Dell EMC…)</li>
+          <li>Sauvegarde incrémentale forever (CBT/CBR pour volumes persistants)</li>
+          <li>Hooks applicatifs pre/post pour cohérence applicative</li>
+          <li>Live Sync : réplication quasi-temps-réel DR (RPO &lt; 15 min possible)</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--green)">Intégration stockage LTO & Data Domain</div><div class="card-body"><ul>
+          <li>DDBoost intégré nativement dans le MediaAgent Commvault</li>
+          <li>LTO via MediaAgent : support bibliothèques physiques et VTL</li>
+          <li>Auxiliaire Copy automatique : Data Domain → LTO selon rétention</li>
+          <li>WORM sur LTO avec cartouches WORM + chiffrement matériel LTO-9</li>
+          <li>Air-gap automatique : isolation réseau des sauvegardes sur bande</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--orange)">Compliance & Reporting</div><div class="card-body"><ul>
+          <li>Metallic (SaaS) : option cloud pour copies hors-site</li>
+          <li>Compliance Lock : immuabilité des sauvegardes (anti-ransomware)</li>
+          <li>Rapports DORA prêts à l'emploi (rétention, chiffrement, tests)</li>
+          <li>Threat Scan : analyse malware des sauvegardes avant restauration</li>
+        </ul></div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 8 – COMMVAULT PROS/CONS -->
+    <div class="slide slide-light" id="slide-8">
+      <div class="slide-header">
+        <div class="label" style="color:var(--comv)">Commvault</div>
+        <h2>Analyse Points Forts / Points Faibles</h2>
+        <div class="sub">Évaluation objective basée sur les fonctionnalités produit et retours terrain</div>
+      </div>
+      <div class="pros-cons">
+        <div class="pros-box">
+          <div class="pros-header">✔ Points forts</div>
+          <div class="pros-body"><ul>
+            <li>Interface Command Center moderne et intuitive : adoption rapide</li>
+            <li>Plateforme unifiée : backup VMs, physique, K8s, SaaS (M365, Salesforce)</li>
+            <li>IntelliSnap : intégration profonde avec les baies storage enterprise</li>
+            <li>Compliance Lock natif : immuabilité WORM sans matériel dédié</li>
+            <li>Threat Scan : détection malware/ransomware dans les backups avant restauration</li>
+            <li>Live Sync : DR actif-passif pour applications critiques K8s (faible RPO)</li>
+            <li>Metallic (SaaS) : copies offsite sans infrastructure supplémentaire</li>
+            <li>Coût total maîtrisé : licences par capacité, options claires</li>
+          </ul></div>
+        </div>
+        <div class="cons-box">
+          <div class="cons-header">✘ Points faibles</div>
+          <div class="cons-body"><ul>
+            <li>Architecture complexe : CommServe, MediaAgents, clients — nombreux composants</li>
+            <li>Footprint ressource : MediaAgent dans le cluster consomme des ressources</li>
+            <li>Support K8s moins mature que Portworx sur certaines fonctionnalités avancées</li>
+            <li>Licensing complexe : multiplication des modules optionnels — coût difficile à anticiper</li>
+            <li>Intégration LTO via MediaAgent uniquement : pas de support direct dans le cluster</li>
+            <li>Restauration granulaire fichier plus lente que les solutions snapshots natives</li>
+          </ul></div>
+        </div>
+      </div>
+      <div class="note-box">Positionnement : Solution polyvalente idéale pour les DSI souhaitant une plateforme unifiée couvrant l'ensemble des workloads. Excellent équilibre fonctionnalités / complexité / TCO.</div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 9 – PORTWORX FONCTIONNALITÉS -->
+    <div class="slide slide-light" id="slide-9">
+      <div class="slide-header">
+        <div class="label" style="color:var(--portx)">Pure Storage</div>
+        <h2>Portworx PX-Backup</h2>
+        <div class="sub">Solution cloud-native Kubernetes-first – Backup & DR orientés conteneurs</div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-header" style="background:var(--portx)">Déploiement & Intégration K8s</div><div class="card-body"><ul>
+          <li>Architecture 100% Kubernetes-native : déployé entièrement comme pods</li>
+          <li>PX-Central : console de gestion multi-cluster cloud-native</li>
+          <li>OpenShift certifié, intégration OperatorHub</li>
+          <li>Stockage distribué Portworx Enterprise : CSI driver pour PVCs HA</li>
+          <li>Intégration Stork (Storage Operator for Kubernetes)</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--portx)">Capacités de sauvegarde</div><div class="card-body"><ul>
+          <li>PX-Backup : backup namespace/application avec cohérence 3DSnap</li>
+          <li>AsyncDR : réplication asynchrone inter-cluster pour disaster recovery</li>
+          <li>Granularité : namespace, application, PVC individuel</li>
+          <li>Hooks pre/post configurables (scripts de quiescence applicative)</li>
+          <li>Intégration Velero : compatible avec l'écosystème open-source</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--red)">⚠ Intégration stockage (ATTENTION)</div><div class="card-body"><ul>
+          <li>Cible backup native : S3 compatible (MinIO, AWS S3, Azure Blob, GCS)</li>
+          <li>Data Domain : intégration via NFS/CIFS uniquement — SANS DDBoost natif</li>
+          <li>LTO : NON supporté nativement — nécessite passerelle VTL ou solution tierce</li>
+          <li>Recommandation LTO : pipeline externe requis (Veeam, script dédié)</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--green)">Points de différenciation</div><div class="card-body"><ul>
+          <li>Autopilot : gestion automatique des règles de rétention</li>
+          <li>PX-DR : RPO quasi-nul pour applications stateful (réplication synchrone)</li>
+          <li>Intégration ArgoCD / Flux : GitOps-native pour restaurations déclaratives</li>
+          <li>Chiffrement per-volume : granulaire au niveau volume (clés par namespace)</li>
+        </ul></div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 10 – PORTWORX PROS/CONS -->
+    <div class="slide slide-light" id="slide-10">
+      <div class="slide-header">
+        <div class="label" style="color:var(--portx)">Portworx PX-Backup</div>
+        <h2>Analyse Points Forts / Points Faibles</h2>
+        <div class="sub">Évaluation objective basée sur les fonctionnalités produit et retours terrain</div>
+      </div>
+      <div class="pros-cons">
+        <div class="pros-box">
+          <div class="pros-header">✔ Points forts</div>
+          <div class="pros-body"><ul>
+            <li>Architecture cloud-native pure : aucun agent lourd, déploiement comme tout workload K8s</li>
+            <li>3DSnap : cohérence applicative au niveau stockage distribué sans agent dans les pods</li>
+            <li>RPO très faible : PX-DR réplication quasi-synchrone pour DR inter-cluster</li>
+            <li>Flexibilité des cibles : tout objet store S3 compatible (cloud ou on-prem)</li>
+            <li>Intégration GitOps : restauration déclarative via ArgoCD/Flux</li>
+            <li>PX-Central : gestion multi-cluster simple et tableau de bord clair</li>
+            <li>Orientation DevOps : API-first, populaire auprès des équipes containers modernes</li>
+            <li>Chiffrement granulaire : par volume et par namespace</li>
+          </ul></div>
+        </div>
+        <div class="cons-box">
+          <div class="cons-header">✘ Points faibles</div>
+          <div class="cons-body"><ul>
+            <li class="critical">⚠ LTO non supporté nativement : POINT BLOQUANT pour rétention 10 ans DORA — nécessite architecture tierce complexe</li>
+            <li class="critical">⚠ Data Domain sans DDBoost : NFS uniquement — perte des optimisations de déduplication distribuée</li>
+            <li>Couplage fort Portworx Storage : optimal uniquement avec Portworx Enterprise (vendor lock-in)</li>
+            <li>Immaturité compliance enterprise : rapports DORA moins riches, personnalisation limitée</li>
+            <li>Support LTO absent du roadmap officiel (focus 100% cloud/objet store)</li>
+            <li>Périmètre K8s uniquement : ne couvre pas VMs, physique ou workloads legacy</li>
+          </ul></div>
+        </div>
+      </div>
+      <div class="note-box warn">⚠ Avertissement : L'absence de support natif LTO est un point BLOQUANT dans le contexte de cette étude (rétention 10 ans DORA). Portworx peut être retenu uniquement si une solution complémentaire de tiering LTO est mise en place en parallèle.</div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 11 – MATRICE -->
+    <div class="slide slide-light" id="slide-11">
+      <div class="slide-header">
+        <div class="label">Comparatif</div>
+        <h2>Matrice de fonctionnalités</h2>
+        <div class="sub">Évaluation sur les critères clés pour un environnement OpenShift enterprise</div>
+      </div>
+      <div class="legend-bar">
+        <strong style="font-size:11px;margin-right:8px">Légende :</strong>
+        <div class="legend-item"><span class="dot-excellent">●●●</span>&nbsp;Excellent</div>
+        <div class="legend-item"><span class="dot-bon">●●○</span>&nbsp;Bon</div>
+        <div class="legend-item"><span class="dot-partiel">●○○</span>&nbsp;Partiel</div>
+        <div class="legend-item"><span class="dot-non">○○○</span>&nbsp;Non supporté</div>
+      </div>
+      <table class="data-table">
+        <thead><tr><th style="width:44%">Critère</th><th class="nb" style="width:18.6%">NetBackup</th><th class="cv" style="width:18.6%">Commvault</th><th class="px" style="width:18.6%">Portworx</th></tr></thead>
+        <tbody>
+          <tr class="cat-row"><td colspan="4">Intégration Kubernetes</td></tr>
+          <tr><td>Support OpenShift certifié</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td></tr>
+          <tr><td>Opérateur natif K8s (CRD)</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td></tr>
+          <tr><td>RBAC granulaire</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td></tr>
+          <tr><td>Multi-cluster management</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td></tr>
+          <tr class="cat-row"><td colspan="4">Capacités Backup</td></tr>
+          <tr><td>Granularité namespace/PVC/fichier</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-bon">●●○</td></tr>
+          <tr><td>Cohérence applicative (hooks)</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td></tr>
+          <tr><td>Snapshots CSI</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td></tr>
+          <tr><td>Incrémentale block-level (CBT)</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-bon">●●○</td></tr>
+          <tr><td>Restauration granulaire (fichier)</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-partiel">●○○</td></tr>
+          <tr class="cat-row"><td colspan="4">Intégration Stockage</td></tr>
+          <tr><td>Data Domain (DDBoost natif)</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-partiel">●○○</td></tr>
+          <tr><td>LTO (support natif)</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-non">○○○</td></tr>
+          <tr><td>LTO WORM (immuabilité bande)</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-non">○○○</td></tr>
+          <tr><td>S3 compatible (object store)</td><td class="center dot-bon">●●○</td><td class="center dot-bon">●●○</td><td class="center dot-excellent">●●●</td></tr>
+          <tr><td>Tiering automatique (SLP/policy)</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-partiel">●○○</td></tr>
+          <tr class="cat-row"><td colspan="4">Conformité & Sécurité</td></tr>
+          <tr><td>Chiffrement AES-256 (transit+repos)</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td></tr>
+          <tr><td>Immuabilité WORM</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-bon">●●○</td></tr>
+          <tr><td>Audit log complet</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-bon">●●○</td></tr>
+          <tr><td>Rapports compliance DORA</td><td class="center dot-excellent">●●●</td><td class="center dot-excellent">●●●</td><td class="center dot-partiel">●○○</td></tr>
+          <tr><td>Analyse malware des backups</td><td class="center dot-bon">●●○</td><td class="center dot-excellent">●●●</td><td class="center dot-partiel">●○○</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 12 – SCORING -->
+    <div class="slide slide-light" id="slide-12">
+      <div class="slide-header">
+        <div class="label">Évaluation</div>
+        <h2>Scoring Comparatif – Note globale pondérée</h2>
+        <div class="sub">Pondération basée sur les exigences DORA et les besoins opérationnels | Note /10 × Poids</div>
+      </div>
+      <table class="data-table">
+        <thead><tr><th style="width:40%">Critère d'évaluation</th><th style="width:10%">Poids</th><th class="nb" style="width:16.6%">NetBackup</th><th class="cv" style="width:16.6%">Commvault</th><th class="px" style="width:16.6%">Portworx</th></tr></thead>
+        <tbody>
+          <tr><td>Support OpenShift natif</td><td class="center">10%</td><td class="center score-high">9/10</td><td class="center score-high">9/10</td><td class="center score-high">9/10</td></tr>
+          <tr><td>Intégration LTO (rétention 10 ans)</td><td class="center">20%</td><td class="center score-high">10/10</td><td class="center score-high">9/10</td><td class="center score-low">2/10</td></tr>
+          <tr><td>Intégration Data Domain (DDBoost)</td><td class="center">15%</td><td class="center score-high">10/10</td><td class="center score-high">10/10</td><td class="center score-low">4/10</td></tr>
+          <tr><td>Granularité backup/restore K8s</td><td class="center">12%</td><td class="center score-high">9/10</td><td class="center score-high">9/10</td><td class="center score-mid">7/10</td></tr>
+          <tr><td>Conformité DORA & Compliance</td><td class="center">15%</td><td class="center score-high">9/10</td><td class="center score-high">9/10</td><td class="center score-mid">6/10</td></tr>
+          <tr><td>Sécurité (WORM, chiffrement, audit)</td><td class="center">10%</td><td class="center score-high">9/10</td><td class="center score-high">10/10</td><td class="center score-mid">7/10</td></tr>
+          <tr><td>Simplicité déploiement & ops</td><td class="center">8%</td><td class="center score-low">5/10</td><td class="center score-mid">7/10</td><td class="center score-high">9/10</td></tr>
+          <tr><td>Coût total de possession (TCO)</td><td class="center">10%</td><td class="center score-low">5/10</td><td class="center score-mid">7/10</td><td class="center score-high">8/10</td></tr>
+          <tr class="score-final" style="background:var(--navy)">
+            <td style="color:var(--white);font-family:'Syne',sans-serif">SCORE GLOBAL PONDÉRÉ</td>
+            <td class="center" style="color:var(--white)">100%</td>
+            <td class="center" style="background:var(--netbk);color:var(--gold)">8.6 / 10</td>
+            <td class="center" style="background:var(--comv);color:var(--gold)">8.9 / 10</td>
+            <td class="center" style="background:var(--portx);color:var(--white)">5.9 / 10</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:14px;text-align:center;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--dark)">
+        🥇 Commvault (8.9/10) &nbsp;&nbsp; 🥈 NetBackup (8.6/10) &nbsp;&nbsp; 🥉 Portworx (5.9/10)
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 13 – DORA MAPPING -->
+    <div class="slide slide-light" id="slide-13">
+      <div class="slide-header">
+        <div class="label">Réglementation</div>
+        <h2>Conformité DORA – Mapping Exigences / Solutions</h2>
+        <div class="sub">Article par article – Capacité de chaque solution à répondre aux obligations réglementaires</div>
+      </div>
+      <table class="data-table">
+        <thead><tr><th style="width:22%">Exigence DORA</th><th class="nb" style="width:14%">NetBackup</th><th class="cv" style="width:14%">Commvault</th><th class="px" style="width:14%">Portworx</th><th style="width:36%">Commentaire</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Art. 9</strong> – Sécurité données</td><td class="center s-ok">✔ Complet</td><td class="center s-ok">✔ Complet</td><td class="center s-partial">◑ Partiel</td><td>Chiffrement AES-256, RBAC, ségrégation réseau backup</td></tr>
+          <tr><td><strong>Art. 11</strong> – Rétention 7–10 ans</td><td class="center s-ok">✔ LTO WORM natif</td><td class="center s-ok">✔ LTO WORM natif</td><td class="center s-no">✘ Solution tierce requise</td><td>LTO WORM obligatoire pour 10 ans. Point bloquant pour Portworx.</td></tr>
+          <tr><td><strong>Art. 12</strong> – RPO/RTO définis</td><td class="center s-ok">✔ SLP auto</td><td class="center s-ok">✔ LiveSync &lt;15min</td><td class="center s-ok">✔ AsyncDR</td><td>Tous supportent la définition formelle RPO/RTO avec monitoring</td></tr>
+          <tr><td><strong>Art. 13</strong> – Tests restauration</td><td class="center s-ok">✔ Instant Test</td><td class="center s-ok">✔ Documenté</td><td class="center s-ok">✔ Automatisé</td><td>Mécanismes de test de restauration avec reporting pour audit</td></tr>
+          <tr><td><strong>Art. 17</strong> – Incident reporting</td><td class="center s-ok">✔ OpsCenter</td><td class="center s-ok">✔ SIEM intégré</td><td class="center s-ok">✔ PX-Central</td><td>Notification ICT &lt;4h — intégrations SIEM disponibles (tous)</td></tr>
+          <tr><td><strong>Art. 25</strong> – TLPT & résilience</td><td class="center s-ok">✔ DR orchestré</td><td class="center s-ok">✔ DR + Failover</td><td class="center s-ok">✔ AsyncDR</td><td>Simulation perte totale cluster et validation restauration complète</td></tr>
+          <tr><td><strong>Art. 30</strong> – Immuabilité</td><td class="center s-ok">✔ WORM + Lock</td><td class="center s-ok">✔ Compliance Lock</td><td class="center s-partial">◑ S3 Object Lock</td><td>Immuabilité anti-ransomware et conformité légale</td></tr>
+          <tr><td><strong>Art. 28</strong> – Risque tiers</td><td class="center s-partial">◑ DD requise</td><td class="center s-partial">◑ DD requise</td><td class="center s-partial">◑ DD requise</td><td>Documentation contractuelle TPSP à établir pour les 3 solutions</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:10px;font-size:10.5px;color:var(--gray);font-style:italic">✔ = Natif &nbsp;·&nbsp; ◑ = Partiel / configuration complémentaire &nbsp;·&nbsp; ✘ = Non supporté ou architecture complexe requise</div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 14 – STOCKAGE -->
+    <div class="slide slide-light" id="slide-14">
+      <div class="slide-header">
+        <div class="label">Infrastructure</div>
+        <h2>Intégration LTO &amp; Dell EMC Data Domain</h2>
+        <div class="sub">Analyse détaillée de la compatibilité stockage – Facteur différenciant majeur</div>
+      </div>
+      <div class="band" style="background:var(--blue)">💿 Dell EMC Data Domain – Rétention court/moyen terme (1 mois – 1 an)</div>
+      <div class="stor-3" style="margin-bottom:16px">
+        <div class="card"><div class="card-header" style="background:var(--netbk)">NetBackup</div><div class="card-body"><ul>
+          <li>DDBoost via OST : protocole propriétaire optimisé</li>
+          <li>Déduplication distribuée côté client (réduction 50–80%)</li>
+          <li>Vérification d'intégrité inline et optimized duplication</li>
+          <li>DD Retention Lock : immuabilité sur Data Domain</li>
+          <li>SLP pour expiration automatique des données</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--comv)">Commvault</div><div class="card-body"><ul>
+          <li>DDBoost natif intégré dans le MediaAgent</li>
+          <li>Déduplication globale cross-clients : réduction maximale</li>
+          <li>Auxiliaire Copy automatique vers LTO depuis DD</li>
+          <li>Support DD Retention Lock Compliance & Governance</li>
+          <li>DD Boost for OpenStorage : vérification et optimisation réseau</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--portx)">Portworx ⚠</div><div class="card-body"><ul>
+          <li>⚠ PAS de support DDBoost natif</li>
+          <li>Intégration via NFS/CIFS uniquement</li>
+          <li>Perte des optimisations DDBoost (dédup client)</li>
+          <li>Consommation réseau et stockage supérieure</li>
+          <li>Fonctionnel mais sous-optimal (grandes volumétries)</li>
+        </ul></div></div>
+      </div>
+      <div class="band" style="background:var(--orange)">📼 Bibliothèque LTO – Rétention long terme (3–10 ans) – DORA Art. 11</div>
+      <div class="stor-3">
+        <div class="card"><div class="card-header" style="background:var(--netbk)">NetBackup</div><div class="card-body"><ul>
+          <li>Support natif bibliothèques LTO physiques et VTL</li>
+          <li>SLP : tiering automatique Data Domain → LTO</li>
+          <li>WORM sur bande LTO certifié (NetBackup Vault)</li>
+          <li>Chiffrement matériel LTO-9 AES-256 géré nativement</li>
+          <li>Barcode management et slot tracking automatique</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--comv)">Commvault</div><div class="card-body"><ul>
+          <li>Support natif bibliothèques LTO via MediaAgent</li>
+          <li>Auxiliaire Copy automatique DD → LTO</li>
+          <li>WORM natif sur cartouches LTO-WORM</li>
+          <li>Chiffrement LTO matériel ou logiciel (clé/cartouche)</li>
+          <li>Gestion inventaire et export bandes hors-site (Vault)</li>
+        </ul></div></div>
+        <div class="card"><div class="card-header" style="background:var(--red)">Portworx ✘</div><div class="card-body"><ul>
+          <li>⛔ NON SUPPORTÉ NATIVEMENT</li>
+          <li>Aucun pilote bibliothèque LTO dans PX-Backup</li>
+          <li>Contournement : VTL (Virtual Tape Library) intermédiaire</li>
+          <li>Alternative : solution tierce (Veeam, NetBackup) en parallèle</li>
+          <li>Architecture complexe + coût supplémentaire significatif</li>
+        </ul></div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 15 – RECOMMANDATION -->
+    <div class="slide slide-light" id="slide-15">
+      <div class="slide-header">
+        <div class="label">Décision</div>
+        <h2>Recommandation &amp; Plan d'action</h2>
+        <div class="sub">Synthèse de l'analyse comparative – Choix recommandé selon les contraintes DORA</div>
+      </div>
+      <div class="reco-main">
+        <div class="badge">🏆 Recommandation principale</div>
+        <h3>Commvault Complete for Kubernetes — Score 8.9 / 10</h3>
+        <p>Meilleur équilibre fonctionnalités / conformité DORA / TCO. Intégration LTO et DDBoost nativement. Compliance Lock anti-ransomware. Plateforme unifiée VMs + K8s + SaaS. Rapports DORA prêts à l'emploi.</p>
+      </div>
+      <div class="reco-alt">
+        <div class="reco-card"><div class="reco-stripe" style="background:var(--netbk)"></div><div class="reco-txt"><h4>🥈 Alternative : Veritas NetBackup (8.6/10)</h4><p>Recommandé si l'équipe dispose d'expertise NetBackup existante ou si l'environnement est très hétérogène (nombreux systèmes legacy). Intégration LTO la plus mature du marché.</p></div></div>
+        <div class="reco-card"><div class="reco-stripe" style="background:var(--orange)"></div><div class="reco-txt"><h4>⚠ Portworx : Usage spécifique uniquement (5.9/10)</h4><p>À retenir uniquement pour workloads K8s pure cloud sans contrainte LTO. Non recommandé dans ce contexte DORA sans architecture hybride complémentaire.</p></div></div>
+      </div>
+      <div style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--dark);margin-bottom:10px">Plan d'action recommandé</div>
+      <div class="phase-grid">
+        <div class="phase-card"><div class="phase-header" style="background:var(--navy)">Phase 1 – J0 à J30</div><div class="phase-body"><ul>
+          <li>Cadrer les exigences RPO/RTO par namespace/application avec les équipes métier</li>
+          <li>Inventorier les PVCs et volumes à protéger (volumétrie, fréquence)</li>
+          <li>Réaliser un PoC Commvault sur un cluster de qualification OpenShift</li>
+        </ul></div></div>
+        <div class="phase-card"><div class="phase-header" style="background:var(--blue)">Phase 2 – J30 à J90</div><div class="phase-body"><ul>
+          <li>Déployer l'opérateur Kubernetes en production (namespace par namespace)</li>
+          <li>Configurer les cibles Data Domain (DDBoost) et SLA par tier</li>
+          <li>Implémenter les règles de tiering automatique DD → LTO selon rétention DORA</li>
+        </ul></div></div>
+        <div class="phase-card"><div class="phase-header" style="background:var(--lblue)">Phase 3 – J90 à J180</div><div class="phase-body"><ul>
+          <li>Tester et documenter les procédures de restauration (Art. 13 DORA)</li>
+          <li>Former les équipes Ops, rédiger les runbooks de restauration d'urgence</li>
+          <li>Produire les premiers rapports DORA et planifier les audits périodiques</li>
+        </ul></div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SLIDE 16 – CONCLUSION -->
+    <div class="slide slide-dark" id="slide-16">
+      <div class="conc-label">Synthèse</div>
+      <h2>Conclusion</h2>
+      <div class="conc-sub">Étude comparative Backup Kubernetes / Red Hat OpenShift</div>
+      <div class="accent-line"></div>
+      <ul class="conc-points">
+        <li><div class="bullet">1</div>Commvault s'impose comme la solution la mieux adaptée : intégration DDBoost et LTO native, Compliance Lock, rapports DORA, et plateforme unifiée.</li>
+        <li><div class="bullet">2</div>NetBackup reste une alternative solide pour les environnements disposant d'une expertise existante et d'architectures très hétérogènes.</li>
+        <li><div class="bullet">3</div>Portworx est disqualifié dans ce contexte précis en raison de l'absence de support LTO natif, condition sine qua non de la rétention 10 ans DORA.</li>
+        <li><div class="bullet">4</div>L'intégration Data Domain via DDBoost est un pré-requis fonctionnel — NetBackup et Commvault la supportent nativement ; Portworx ne la supporte pas.</li>
+        <li><div class="bullet">5</div>La conformité DORA impose des tests de restauration documentés, une immuabilité WORM et un chiffrement AES-256 — couverts par les deux solutions retenues.</li>
+      </ul>
+      <div class="next-step">→ Prochaine étape : PoC Commvault sur cluster de qualification OpenShift</div>
+    </div>
+
+  </div><!-- /stage -->
+
+  <!-- BOTTOM NAV -->
+  <div id="botnav">
+    <button class="nav-btn" id="btn-prev" onclick="prevSlide()">◀ Précédent</button>
+    <div id="dot-nav"></div>
+    <button class="nav-btn primary" id="btn-next" onclick="nextSlide()">Suivant ▶</button>
+  </div>
+
+</div><!-- /shell -->
+
+<script>
+const TOTAL = 16;
+let current = 1;
+
+const dotNav = document.getElementById('dot-nav');
+const btnPrev = document.getElementById('btn-prev');
+const btnNext = document.getElementById('btn-next');
+
+// Build dots
+for (let i = 1; i <= TOTAL; i++) {
+  const d = document.createElement('div');
+  d.className = 'dot' + (i === 1 ? ' active' : '');
+  d.title = 'Slide ' + i;
+  d.onclick = () => goTo(i);
+  dotNav.appendChild(d);
+}
+
+function goTo(n) {
+  const prev = document.getElementById('slide-' + current);
+  const next = document.getElementById('slide-' + n);
+  if (!prev || !next || n === current) return;
+
+  const forward = n > current;
+  prev.classList.remove('active');
+  prev.classList.add(forward ? 'prev' : '');
+  if (!forward) prev.style.transform = 'translateX(60px)';
+
+  setTimeout(() => {
+    prev.classList.remove('prev');
+    prev.style.transform = '';
+  }, 520);
+
+  next.style.transform = forward ? 'translateX(60px)' : 'translateX(-60px)';
+  next.style.opacity = '0';
+  next.classList.add('active');
+  requestAnimationFrame(() => {
+    next.style.transition = 'none';
+    requestAnimationFrame(() => {
+      next.style.transition = '';
+      next.style.transform = 'translateX(0)';
+      next.style.opacity = '1';
+    });
+  });
+
+  // Reset scroll
+  next.scrollTop = 0;
+
+  // Update dots
+  document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i + 1 === n));
+
+  // Counter + progress
+  document.getElementById('cur').textContent = n;
+  document.getElementById('progress-bar').style.width = (n / TOTAL * 100) + '%';
+
+  // Buttons
+  btnPrev.disabled = n === 1;
+  btnNext.disabled = n === TOTAL;
+
+  current = n;
+}
+
+function nextSlide() { if (current < TOTAL) goTo(current + 1); }
+function prevSlide() { if (current > 1) goTo(current - 1); }
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown') nextSlide();
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp'   || e.key === 'PageUp')   prevSlide();
+  if (e.key === 'Home') goTo(1);
+  if (e.key === 'End')  goTo(TOTAL);
+  if (e.key >= '1' && e.key <= '9') goTo(parseInt(e.key));
+});
+
+// Touch swipe
+let tx = 0;
+document.getElementById('stage').addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+document.getElementById('stage').addEventListener('touchend', e => {
+  const dx = tx - e.changedTouches[0].clientX;
+  if (Math.abs(dx) > 50) { dx > 0 ? nextSlide() : prevSlide(); }
+}, { passive: true });
+
+// Init
+btnPrev.disabled = true;
+</script>
+
+</body>
+</html>
