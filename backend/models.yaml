@@ -9,7 +9,10 @@ profiles:
   IBM-DPI:
     description: "IBM DPI — PDU surveillée (mesures), prises non commutables via SNMP"
     switched: false
+<<<<<<< HEAD
     estimate_power_if_zero: true   # firmware DPI : TruePower parfois à 0 sous charge -> estimation V×I
+=======
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
     metrics:
       # pduOutputVoltageAPresentValue (0.1 V) — walk: 2362 -> 236.2 V
       voltage:     { oid: "1.3.6.1.4.1.534.6.6.2.1.3.2.7.1.1.0",  scale: 0.1 }

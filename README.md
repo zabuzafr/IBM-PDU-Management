@@ -37,6 +37,7 @@ docker compose up -d --build
 - **`npm ci` échoue au build** : le `package-lock.json` doit être synchronisé avec `package.json` → `cd frontend && npm install` puis rebuild.
 - **Erreur 500 à la connexion** : vérifier les logs API ; `bcrypt` doit rester figé en `4.0.1` (incompatibilité connue passlib 1.7.4 / bcrypt ≥ 5).
 
+<<<<<<< HEAD
 ## Matériels et MIB pris en charge
 
 | Profil | Matériel testé | MIB (versionnée dans `mibs/`) | Firmware validé | Type |
@@ -61,6 +62,11 @@ La prise en charge d'un nouvel équipement se fait par ajout d'un profil dans `b
 3. **Idéalement, un accès temporaire à un PDU de test** (prêt d'un équipement ou accès réseau à un exemplaire de labo) pour valider en conditions réelles : mesures, échelles/unités, et surtout les commandes ON/OFF/CYCLE si le modèle est commutable — celles-ci ne doivent **jamais** être validées à l'aveugle sur un équipement de production.
 
 Sans ces éléments (au minimum MIB + snmpwalk), un profil ne peut être qu'approximatif et sera marqué comme *non validé*. Envoyez la MIB et le walk via une issue ou une pull request du dépôt, en précisant : modèle exact, version de firmware, nombre et type de prises, et si le PDU est commutable ou surveillé.
+=======
+## Profils PDU
+- **IBM-DPI** (défaut) : firmware "IBM DPI" (arbre SNMP Powerware 534, cf. MIB IBM_DPI_0_91_Linux.mib). PDU **surveillée** : mesures globales (V/A/W/°C) et par prise (courant, puissance), mais **prises non commutables via SNMP** (la MIB ne contient aucun objet de commande ON/OFF).
+- **IBM-42R8743** : ancien profil (arbre IBM 1.3.6.1.4.1.2.6.223.8), commutable si le firmware l'expose.
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 
 ## Passer en SNMP réel
 - `USE_MOCK=false` dans `docker-compose.yml`

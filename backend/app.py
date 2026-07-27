@@ -64,6 +64,7 @@ async def log_requests(request: Request, call_next):
         log.debug(line) if DEBUG else None
     return response
 
+<<<<<<< HEAD
 # -------- InfluxDB (optionnel) --------
 # Export des mesures (globales + par prise) vers InfluxDB v2 en line-protocol,
 # via une tâche de fond qui interroge chaque PDU toutes les INFLUX_INTERVAL s.
@@ -136,6 +137,8 @@ async def start_influx_poller():
     else:
         log.info("InfluxDB désactivé (définir INFLUX_URL et INFLUX_TOKEN pour activer l'export)")
 
+=======
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 @app.get("/health")
 def health():
     """Endpoint de santé, sans authentification, pour vérifier que l'API répond."""
@@ -267,6 +270,7 @@ class SnmpClient:
         finally:
             engine.close_dispatcher()
 
+<<<<<<< HEAD
     async def _aset(self, host: str, oid: str, value: Any, as_string: bool = False):
         from pysnmp.hlapi.v3arch.asyncio import SnmpEngine, UdpTransportTarget, ContextData, ObjectType, ObjectIdentity, set_cmd
         from pysnmp.proto.rfc1902 import Integer, OctetString
@@ -276,6 +280,16 @@ class SnmpClient:
             snmp_val = OctetString(str(value)) if as_string else Integer(int(value))
             errorIndication, errorStatus, errorIndex, varBinds = await set_cmd(
                 engine, self._auth(), target, ContextData(), ObjectType(ObjectIdentity(oid), snmp_val))
+=======
+    async def _aset(self, host: str, oid: str, value: int):
+        from pysnmp.hlapi.v3arch.asyncio import SnmpEngine, UdpTransportTarget, ContextData, ObjectType, ObjectIdentity, set_cmd
+        from pysnmp.proto.rfc1902 import Integer
+        engine = SnmpEngine()
+        try:
+            target = await UdpTransportTarget.create((host, 161), timeout=1, retries=1)
+            errorIndication, errorStatus, errorIndex, varBinds = await set_cmd(
+                engine, self._auth(), target, ContextData(), ObjectType(ObjectIdentity(oid), Integer(value)))
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
             if errorIndication or errorStatus:
                 raise HTTPException(status_code=502, detail=f"SNMP SET failed ({host} {oid}={value}): {errorIndication or errorStatus.prettyPrint()}")
             return True
@@ -303,6 +317,7 @@ class SnmpClient:
             return self._mock_set(host, oid, value)
         log.debug("SNMP SET %s %s = %s", host, oid, value)
         return _run_coro_sync(self._aset(host, oid, value))
+<<<<<<< HEAD
 
     def set_str(self, host: str, oid: str, value: str) -> Any:
         """SET d'une chaîne (OctetString), ex. renommage d'une prise."""
@@ -320,6 +335,8 @@ class SnmpClient:
             return False
         log.debug("SNMP SET (str) %s %s = %r", host, oid, value)
         return _run_coro_sync(self._aset(host, oid, value, as_string=True))
+=======
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 
     # --- MOCK ---
     # Simulation cohérente : chaque prise allumée tire une charge stable (0.30–0.89 A,
@@ -407,7 +424,10 @@ class Outlet(BaseModel):
     state: int              # 1=ON, 2=OFF, 0=inconnu, -1=non commutable (PDU surveillée)
     power_w: Optional[float] = None
     current_a: Optional[float] = None
+<<<<<<< HEAD
     power_estimated: bool = False   # True si le firmware ne fournit pas la puissance mesurée (calcul V×I×cosφ)
+=======
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 
 class Metrics(BaseModel):
     voltage: Optional[float] = None
@@ -515,6 +535,7 @@ def find_pdu(pdu_id: str) -> Dict[str, Any]:
         raise HTTPException(404, f"PDU inconnu: {pdu_id}")
     return pdu
 
+<<<<<<< HEAD
 class PduUpdate(BaseModel):
     new_id: Optional[str] = None
     location: Optional[str] = None
@@ -577,6 +598,8 @@ async def rename_outlet(pdu_id: str, idx: str, req: OutletRename, user: User = D
     audit(f"{user.username} RENAME_OUTLET {pdu_id} outlet={idx} -> {name!r}")
     return {"ok": True, "name": name}
 
+=======
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 @app.get("/pdus/{pdu_id}/outlets", response_model=List[Outlet])
 async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
     """Liste les prises (nom + état) d'un PDU. Route appelée par le GUI au clic sur un PDU."""
@@ -641,6 +664,7 @@ async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
         volt_oids = [f"{o['group_base']}.{i+1}.1.0" for i in range(1, maxg + 1)]
         name_oids = [f"{o['name_base']}.{i+1}.0" for i in range(1, maxg + 1)]
         cur_oids  = [f"{o['group_base']}.{i+1}.4.0" for i in range(1, maxg + 1)]
+<<<<<<< HEAD
         pf_oids   = [f"{o['group_base']}.{i+1}.7.0" for i in range(1, maxg + 1)]
         pow_oids  = [f"{o['group_base']}.{i+1}.10.0" for i in range(1, maxg + 1)]
         results = snmp.get_many(pdu["ip"], volt_oids + name_oids + cur_oids + pf_oids + pow_oids)
@@ -649,6 +673,14 @@ async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
         curs  = results[2*maxg:3*maxg]
         pfs   = results[3*maxg:4*maxg]
         pows  = results[4*maxg:]
+=======
+        pow_oids  = [f"{o['group_base']}.{i+1}.10.0" for i in range(1, maxg + 1)]
+        results = snmp.get_many(pdu["ip"], volt_oids + name_oids + cur_oids + pow_oids)
+        volts = results[:maxg]
+        names = results[maxg:2*maxg]
+        curs  = results[2*maxg:3*maxg]
+        pows  = results[3*maxg:]
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 
         def num(v, scale):
             if isinstance(v, Exception): return None
@@ -661,6 +693,7 @@ async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
             n = names[i-1]
             raw_name = "" if isinstance(n, Exception) else str(n).strip()
             name = raw_name if raw_name and raw_name.lower() != "[description]" else f"J{i}"
+<<<<<<< HEAD
             volt = num(volts[i-1], 0.1)
             cur  = num(curs[i-1], 0.1)
             pf   = num(pfs[i-1], 0.01)   # facteur de puissance (0.01)
@@ -676,6 +709,10 @@ async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
                           pdu_id, i, tp, volt, cur, pf)
             outlets.append(Outlet(index=str(i), name=name, state=-1,
                                   current_a=cur, power_w=tp, power_estimated=estimated))
+=======
+            outlets.append(Outlet(index=str(i), name=name, state=-1,
+                                  current_a=num(curs[i-1], 0.1), power_w=num(pows[i-1], 1)))
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
         if not outlets:
             log.warning("Aucun load group détecté pour %s — vérifier le profil/firmware", pdu_id)
     else:

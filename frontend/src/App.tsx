@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
+<<<<<<< HEAD
 import { Power, RefreshCw, Plug, Plus, Server, CircleAlert, Trash2, Pencil } from "lucide-react";
+=======
+import { Power, RefreshCw, Plug, Plus, Server, CircleAlert, Trash2 } from "lucide-react";
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
@@ -53,7 +57,11 @@ function useToken() {
 }
 
 type Pdu = { id: string; ip: string; model?: string; location?: string; notes?: string };
+<<<<<<< HEAD
 type Outlet = { index: string; name: string; state: number; power_w?: number|null; current_a?: number|null; power_estimated?: boolean };
+=======
+type Outlet = { index: string; name: string; state: number; power_w?: number|null; current_a?: number|null };
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 type Metrics = { voltage?: number; current?: number; power?: number; temperature?: number };
 type HistPoint = { ts: string; voltage?: number; current?: number; power?: number; temperature?: number };
 
@@ -116,6 +124,7 @@ export default function App() {
 
   const filtered = useMemo(() => pdus.filter(p => (p.id + p.ip + (p.location||"") + (p.model||"")).toLowerCase().includes(filter.toLowerCase())), [pdus, filter]);
 
+<<<<<<< HEAD
   const renamePdu = async (p: Pdu) => {
     if (!token) return;
     const newId = window.prompt(`Nouveau nom pour le PDU "${p.id}" :`, p.id);
@@ -142,6 +151,8 @@ export default function App() {
     } catch (e:any) { setErr(`Renommage de la prise ${o.index} impossible : ${e.message}`); }
   };
 
+=======
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
   const delPdu = async (p: Pdu) => {
     if (!token) return;
     if (!window.confirm(`Supprimer le PDU "${p.id}" (${p.ip}) ?`)) return;
@@ -194,7 +205,10 @@ export default function App() {
               </div>
               <div className="flex items-center gap-1">
                 <span className="text-xs opacity-60">{p.model || 'Modèle inconnu'}</span>
+<<<<<<< HEAD
                 <button className="btn btn-ghost p-1" title={`Renommer ${p.id}`} onClick={(e)=>{ e.stopPropagation(); renamePdu(p); }}><Pencil className="w-4 h-4"/></button>
+=======
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
                 <button className="btn btn-ghost p-1" title={`Supprimer ${p.id}`} onClick={(e)=>{ e.stopPropagation(); delPdu(p); }}><Trash2 className="w-4 h-4 text-red-500"/></button>
               </div>
             </div>
@@ -253,6 +267,7 @@ export default function App() {
               {outlets.map(o => (
                 <tr key={o.index} className="border-t border-neutral-200 dark:border-neutral-800">
                   <td>{o.index}</td>
+<<<<<<< HEAD
                   <td>
                     <span className="inline-flex items-center gap-1">
                       {o.name}
@@ -264,6 +279,12 @@ export default function App() {
                   <td title={o.power_estimated ? "Puissance estimée (V × I × cosφ) : le firmware ne fournit pas la mesure directe pour cette prise" : undefined}>
                     {o.power_w != null ? `${o.power_estimated ? '~' : ''}${o.power_w} W` : '—'}
                   </td>
+=======
+                  <td>{o.name}</td>
+                  <td>{o.state===-1? <span className="badge">Mesure</span> : o.state===1? <span className="badge badge-on">ON</span> : o.state===2? <span className="badge badge-off">OFF</span> : <span className="badge">?</span>}</td>
+                  <td>{o.current_a != null ? `${o.current_a} A` : '—'}</td>
+                  <td>{o.power_w != null ? `${o.power_w} W` : '—'}</td>
+>>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
                   <td className="flex gap-2">
                     {o.state===-1 ? (
                       <span className="text-xs opacity-60">PDU surveillée — non commutable via SNMP</span>
