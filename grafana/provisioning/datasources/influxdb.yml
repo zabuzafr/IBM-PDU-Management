@@ -1,0 +1,14 @@
+apiVersion: 1
+datasources:
+  - name: InfluxDB-PDU
+    uid: influxdb-pdu
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: pdu
+      defaultBucket: pdu
+    secureJsonData:
+      token: pdu-dev-token
+    isDefault: true
