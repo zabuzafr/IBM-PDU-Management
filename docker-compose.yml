@@ -4,14 +4,16 @@ services:
     build: ./backend
     environment:
       - SECRET_KEY=change_me
-      - USE_MOCK=true            # true = pas d’accès SNMP, renvoie des données simulées
-      - SNMP_VERSION=2c          # 2c ou 3
-      - SNMP_COMMUNITY=public    # v2c
-      # Pour SNMPv3, ajoutez :
-      # - SNMPV3_USER=ops
-      # - SNMPV3_AUTH=SHA
-      # - SNMPV3_AUTH_KEY=xxxx
-      # - SNMPV3_PRIV=AES
+      - DEBUG=true               # true = logs détaillés (requêtes HTTP, debug)
+      - USE_MOCK=false           # true = pas d’accès SNMP, renvoie des données simulées
+      - SNMP_VERSION=3           # 2c ou 3 (le PDU IBM DPI répond en v3, utilisateur pduscript)
+      - SNMP_COMMUNITY=public    # utilisé seulement si SNMP_VERSION=2c
+      - SNMPV3_USER=pduscript
+      # Niveau noAuthNoPriv : laissez les clés ci-dessous commentées.
+      # Niveau authNoPriv : décommentez AUTH ; authPriv : décommentez aussi PRIV.
+      # - SNMPV3_AUTH=MD5        # MD5 ou SHA
+      # - SNMPV3_AUTH_KEY=pduscript
+      # - SNMPV3_PRIV=AES        # DES ou AES
       # - SNMPV3_PRIV_KEY=yyyy
       - ALLOWED_ORIGINS=*
     volumes:
