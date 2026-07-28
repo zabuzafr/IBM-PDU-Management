@@ -64,7 +64,6 @@ async def log_requests(request: Request, call_next):
         log.debug(line) if DEBUG else None
     return response
 
-<<<<<<< HEAD
 # -------- InfluxDB (optionnel) --------
 # Export des mesures (globales + par prise) vers InfluxDB v2 en line-protocol,
 # via une tâche de fond qui interroge chaque PDU toutes les INFLUX_INTERVAL s.
@@ -102,7 +101,7 @@ async def influx_poller():
                 ts = int(time.time())
                 tags = f"pdu={_lp_escape(p['id'])},ip={_lp_escape(p['ip'])}"
                 try:
-                    mets = await get_metrics(p["id"], record=False, user=system_user)
+                    mets = await asyncio.to_thread(get_metrics, p["id"], False, system_user)
                     fields = ",".join(f"{k}={v}" for k, v in
                                       [("voltage", mets.voltage), ("current", mets.current), ("power", mets.power)]
                                       if v is not None)
@@ -110,7 +109,7 @@ async def influx_poller():
                 except Exception as e:
                     log.warning("Influx: métriques indisponibles pour %s: %s", p["id"], e)
                 try:
-                    outs = await list_outlets(p["id"], user=system_user)
+                    outs = await asyncio.to_thread(list_outlets, p["id"], system_user)
                     for o in outs:
                         otags = f"{tags},outlet={o.index},name={_lp_escape(o.name)}"
                         ofields = []
@@ -137,8 +136,6 @@ async def start_influx_poller():
     else:
         log.info("InfluxDB désactivé (définir INFLUX_URL et INFLUX_TOKEN pour activer l'export)")
 
-=======
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 @app.get("/health")
 def health():
     """Endpoint de santé, sans authentification, pour vérifier que l'API répond."""
@@ -270,7 +267,6 @@ class SnmpClient:
         finally:
             engine.close_dispatcher()
 
-<<<<<<< HEAD
     async def _aset(self, host: str, oid: str, value: Any, as_string: bool = False):
         from pysnmp.hlapi.v3arch.asyncio import SnmpEngine, UdpTransportTarget, ContextData, ObjectType, ObjectIdentity, set_cmd
         from pysnmp.proto.rfc1902 import Integer, OctetString
@@ -280,16 +276,6 @@ class SnmpClient:
             snmp_val = OctetString(str(value)) if as_string else Integer(int(value))
             errorIndication, errorStatus, errorIndex, varBinds = await set_cmd(
                 engine, self._auth(), target, ContextData(), ObjectType(ObjectIdentity(oid), snmp_val))
-=======
-    async def _aset(self, host: str, oid: str, value: int):
-        from pysnmp.hlapi.v3arch.asyncio import SnmpEngine, UdpTransportTarget, ContextData, ObjectType, ObjectIdentity, set_cmd
-        from pysnmp.proto.rfc1902 import Integer
-        engine = SnmpEngine()
-        try:
-            target = await UdpTransportTarget.create((host, 161), timeout=1, retries=1)
-            errorIndication, errorStatus, errorIndex, varBinds = await set_cmd(
-                engine, self._auth(), target, ContextData(), ObjectType(ObjectIdentity(oid), Integer(value)))
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
             if errorIndication or errorStatus:
                 raise HTTPException(status_code=502, detail=f"SNMP SET failed ({host} {oid}={value}): {errorIndication or errorStatus.prettyPrint()}")
             return True
@@ -317,7 +303,6 @@ class SnmpClient:
             return self._mock_set(host, oid, value)
         log.debug("SNMP SET %s %s = %s", host, oid, value)
         return _run_coro_sync(self._aset(host, oid, value))
-<<<<<<< HEAD
 
     def set_str(self, host: str, oid: str, value: str) -> Any:
         """SET d'une chaîne (OctetString), ex. renommage d'une prise."""
@@ -335,8 +320,6 @@ class SnmpClient:
             return False
         log.debug("SNMP SET (str) %s %s = %r", host, oid, value)
         return _run_coro_sync(self._aset(host, oid, value, as_string=True))
-=======
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 
     # --- MOCK ---
     # Simulation cohérente : chaque prise allumée tire une charge stable (0.30–0.89 A,
@@ -424,10 +407,7 @@ class Outlet(BaseModel):
     state: int              # 1=ON, 2=OFF, 0=inconnu, -1=non commutable (PDU surveillée)
     power_w: Optional[float] = None
     current_a: Optional[float] = None
-<<<<<<< HEAD
     power_estimated: bool = False   # True si le firmware ne fournit pas la puissance mesurée (calcul V×I×cosφ)
-=======
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 
 class Metrics(BaseModel):
     voltage: Optional[float] = None
@@ -535,20 +515,31 @@ def find_pdu(pdu_id: str) -> Dict[str, Any]:
         raise HTTPException(404, f"PDU inconnu: {pdu_id}")
     return pdu
 
-<<<<<<< HEAD
 class PduUpdate(BaseModel):
     new_id: Optional[str] = None
+    ip: Optional[str] = None
     location: Optional[str] = None
     notes: Optional[str] = None
 
 @app.put("/pdus/{pdu_id}", response_model=Pdu)
 async def update_pdu(pdu_id: str, upd: PduUpdate, user: User = Depends(current_user)):
-    """Renomme un PDU (new_id) et/ou met à jour localisation et notes.
-    L'historique de mesures suit le nouveau nom."""
+    """Met à jour un PDU : renommage (new_id), changement d'adresse IP (moves /
+    déménagements), localisation, notes. L'historique de mesures est conservé
+    et suit le PDU."""
     if user.role != "operator":
         raise HTTPException(403, "Rôle 'operator' requis")
     pdu = find_pdu(pdu_id)
     pdus = read_pdus()
+    if upd.ip and upd.ip != pdu["ip"]:
+        try:
+            ipaddress.ip_address(upd.ip)
+        except ValueError:
+            raise HTTPException(400, f"Adresse IP invalide : {upd.ip!r}")
+        if any(x["ip"] == upd.ip and x["id"] != pdu_id for x in pdus):
+            other = next(x["id"] for x in pdus if x["ip"] == upd.ip and x["id"] != pdu_id)
+            raise HTTPException(400, f"Adresse IP déjà utilisée par le PDU {other!r}")
+        log.info("Changement d'IP du PDU %s: %s -> %s par %s", pdu_id, pdu["ip"], upd.ip, user.username)
+        audit(f"{user.username} CHANGE_IP {pdu_id} {pdu['ip']} -> {upd.ip}")
     if upd.new_id and upd.new_id != pdu_id:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", upd.new_id):
             raise HTTPException(400, "Nouvel ID invalide : 1 à 64 caractères (lettres, chiffres, - _ .)")
@@ -563,6 +554,7 @@ async def update_pdu(pdu_id: str, upd: PduUpdate, user: User = Depends(current_u
     for p in pdus:
         if p["id"] == pdu_id:
             if upd.new_id: p["id"] = upd.new_id
+            if upd.ip: p["ip"] = upd.ip
             if upd.location is not None: p["location"] = upd.location
             if upd.notes is not None: p["notes"] = upd.notes
             pdu = p
@@ -573,7 +565,7 @@ class OutletRename(BaseModel):
     name: str
 
 @app.put("/pdus/{pdu_id}/outlets/{idx}/name")
-async def rename_outlet(pdu_id: str, idx: str, req: OutletRename, user: User = Depends(current_user)):
+def rename_outlet(pdu_id: str, idx: str, req: OutletRename, user: User = Depends(current_user)):
     """Renomme une prise, en écrivant le nom DANS le PDU (OID de nom en read-write)."""
     if user.role != "operator":
         raise HTTPException(403, "Rôle 'operator' requis pour renommer une prise")
@@ -598,10 +590,8 @@ async def rename_outlet(pdu_id: str, idx: str, req: OutletRename, user: User = D
     audit(f"{user.username} RENAME_OUTLET {pdu_id} outlet={idx} -> {name!r}")
     return {"ok": True, "name": name}
 
-=======
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 @app.get("/pdus/{pdu_id}/outlets", response_model=List[Outlet])
-async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
+def list_outlets(pdu_id: str, user: User = Depends(current_user)):
     """Liste les prises (nom + état) d'un PDU. Route appelée par le GUI au clic sur un PDU."""
     pdu = find_pdu(pdu_id)
     profile = get_profile_for(pdu)
@@ -664,7 +654,6 @@ async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
         volt_oids = [f"{o['group_base']}.{i+1}.1.0" for i in range(1, maxg + 1)]
         name_oids = [f"{o['name_base']}.{i+1}.0" for i in range(1, maxg + 1)]
         cur_oids  = [f"{o['group_base']}.{i+1}.4.0" for i in range(1, maxg + 1)]
-<<<<<<< HEAD
         pf_oids   = [f"{o['group_base']}.{i+1}.7.0" for i in range(1, maxg + 1)]
         pow_oids  = [f"{o['group_base']}.{i+1}.10.0" for i in range(1, maxg + 1)]
         results = snmp.get_many(pdu["ip"], volt_oids + name_oids + cur_oids + pf_oids + pow_oids)
@@ -673,14 +662,6 @@ async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
         curs  = results[2*maxg:3*maxg]
         pfs   = results[3*maxg:4*maxg]
         pows  = results[4*maxg:]
-=======
-        pow_oids  = [f"{o['group_base']}.{i+1}.10.0" for i in range(1, maxg + 1)]
-        results = snmp.get_many(pdu["ip"], volt_oids + name_oids + cur_oids + pow_oids)
-        volts = results[:maxg]
-        names = results[maxg:2*maxg]
-        curs  = results[2*maxg:3*maxg]
-        pows  = results[3*maxg:]
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 
         def num(v, scale):
             if isinstance(v, Exception): return None
@@ -693,7 +674,6 @@ async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
             n = names[i-1]
             raw_name = "" if isinstance(n, Exception) else str(n).strip()
             name = raw_name if raw_name and raw_name.lower() != "[description]" else f"J{i}"
-<<<<<<< HEAD
             volt = num(volts[i-1], 0.1)
             cur  = num(curs[i-1], 0.1)
             pf   = num(pfs[i-1], 0.01)   # facteur de puissance (0.01)
@@ -709,10 +689,6 @@ async def list_outlets(pdu_id: str, user: User = Depends(current_user)):
                           pdu_id, i, tp, volt, cur, pf)
             outlets.append(Outlet(index=str(i), name=name, state=-1,
                                   current_a=cur, power_w=tp, power_estimated=estimated))
-=======
-            outlets.append(Outlet(index=str(i), name=name, state=-1,
-                                  current_a=num(curs[i-1], 0.1), power_w=num(pows[i-1], 1)))
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
         if not outlets:
             log.warning("Aucun load group détecté pour %s — vérifier le profil/firmware", pdu_id)
     else:
@@ -747,7 +723,7 @@ class OutletAction(BaseModel):
     action: str  # on | off | cycle
 
 @app.post("/pdus/{pdu_id}/outlets/{idx}/action")
-async def outlet_action(pdu_id: str, idx: str, req: OutletAction, user: User = Depends(current_user)):
+def outlet_action(pdu_id: str, idx: str, req: OutletAction, user: User = Depends(current_user)):
     """Commande ON/OFF/CYCLE d'une prise. Réservé au rôle operator."""
     if user.role != "operator":
         raise HTTPException(403, "Rôle 'operator' requis pour commander une prise")
@@ -772,7 +748,7 @@ async def outlet_action(pdu_id: str, idx: str, req: OutletAction, user: User = D
     return {"ok": True}
 
 @app.get("/pdus/{pdu_id}/metrics", response_model=Metrics)
-async def get_metrics(pdu_id: str, record: bool = False, user: User = Depends(current_user)):
+def get_metrics(pdu_id: str, record: bool = False, user: User = Depends(current_user)):
     pdu = next((p for p in read_pdus() if p["id"] == pdu_id), None)
     if not pdu: raise HTTPException(404, "PDU inconnu")
     profile = get_profile_for(pdu)
@@ -847,21 +823,72 @@ def prometheus_metrics():
     data = generate_latest(reg)
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)
 
-@app.get("/discover")
-async def discover(cidr: str, max_hosts: int = 256, user: User = Depends(current_user)):
-    try:
-        net = ipaddress.ip_network(cidr, strict=False)
-    except Exception:
-        raise HTTPException(400, "CIDR invalide")
-    hosts = list(net.hosts())
-    if len(hosts) > max_hosts:
-        hosts = hosts[:max_hosts]
-    results = []
-    for h in hosts:
-        ip = str(h)
+# -------- Découverte réseau en tâche de fond --------
+# L'ancienne route /discover sondait les IP séquentiellement DANS la requête :
+# un /24 bloquait l'API plusieurs minutes. Désormais : POST /discover/start
+# lance un scan en arrière-plan (sondes parallèles), GET /discover/status
+# renvoie la progression et les résultats au fil de l'eau.
+_discover_state: Dict[str, Any] = {"running": False, "cidr": None, "total": 0, "done": 0, "found": [], "error": None}
+_discover_lock = __import__("threading").Lock()
+
+def _suggest_model(sys_oid: str) -> str:
+    return "IBM-DPI" if "534.6" in str(sys_oid) else "IBM-42R8743"
+
+def _discover_worker(hosts: List[str]):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    def probe(ip: str):
         try:
             soid = snmp.get(ip, "1.3.6.1.2.1.1.2.0")
-            results.append({"ip": ip, "reachable": True, "sysObjectID": soid, "suggested_model": "IBM-42R8743"})
+            return {"ip": ip, "reachable": True, "sysObjectID": str(soid), "suggested_model": _suggest_model(soid)}
         except Exception:
-            continue
-    return {"found": results}
+            return None
+    try:
+        with ThreadPoolExecutor(max_workers=16, thread_name_prefix="discover") as ex:
+            futures = {ex.submit(probe, ip): ip for ip in hosts}
+            for fut in as_completed(futures):
+                res = fut.result()
+                with _discover_lock:
+                    _discover_state["done"] += 1
+                    if res:
+                        _discover_state["found"].append(res)
+                        log.info("Découverte: PDU trouvé %s (%s)", res["ip"], res["suggested_model"])
+    except Exception as e:
+        log.error("Découverte: erreur: %s", e)
+        with _discover_lock:
+            _discover_state["error"] = str(e)
+    finally:
+        with _discover_lock:
+            _discover_state["running"] = False
+        log.info("Découverte terminée: %d/%d sondes, %d PDU trouvé(s)",
+                 _discover_state["done"], _discover_state["total"], len(_discover_state["found"]))
+
+class DiscoverStart(BaseModel):
+    cidr: str
+    max_hosts: int = 256
+
+@app.post("/discover/start")
+async def discover_start(req: DiscoverStart, user: User = Depends(current_user)):
+    try:
+        net = ipaddress.ip_network(req.cidr, strict=False)
+    except Exception:
+        raise HTTPException(400, f"CIDR invalide : {req.cidr!r}")
+    with _discover_lock:
+        if _discover_state["running"]:
+            raise HTTPException(409, "Un scan est déjà en cours — consultez /discover/status")
+        hosts = [str(h) for h in net.hosts()][: req.max_hosts]
+        _discover_state.update({"running": True, "cidr": req.cidr, "total": len(hosts),
+                                "done": 0, "found": [], "error": None})
+    log.info("Découverte lancée par %s: %s (%d hôtes, en arrière-plan)", user.username, req.cidr, len(hosts))
+    __import__("threading").Thread(target=_discover_worker, args=(hosts,), daemon=True).start()
+    return {"started": True, "total": len(hosts)}
+
+@app.get("/discover/status")
+async def discover_status(user: User = Depends(current_user)):
+    with _discover_lock:
+        return dict(_discover_state)
+
+@app.get("/discover")
+async def discover_legacy(cidr: str, max_hosts: int = 256, user: User = Depends(current_user)):
+    """Compatibilité : lance le scan en arrière-plan et renvoie immédiatement.
+    Utiliser POST /discover/start puis GET /discover/status."""
+    return await discover_start(DiscoverStart(cidr=cidr, max_hosts=max_hosts), user)

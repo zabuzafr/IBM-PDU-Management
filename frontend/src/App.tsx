@@ -1,9 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-<<<<<<< HEAD
 import { Power, RefreshCw, Plug, Plus, Server, CircleAlert, Trash2, Pencil } from "lucide-react";
-=======
-import { Power, RefreshCw, Plug, Plus, Server, CircleAlert, Trash2 } from "lucide-react";
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
@@ -23,16 +19,24 @@ async function readError(r: Response): Promise<string> {
   return `Erreur HTTP ${r.status}`;
 }
 
-/** fetch avec logs debug + messages d'erreur explicites (réseau vs HTTP). */
-async function apiFetch(path: string, opts: RequestInit = {}): Promise<Response> {
+/** fetch avec logs debug, timeout (15 s) et messages d'erreur explicites (réseau vs HTTP). */
+async function apiFetch(path: string, opts: RequestInit = {}, timeoutMs = 15000): Promise<Response> {
   const url = `${API}${path}`;
   dbg("→", opts.method || "GET", url);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   let r: Response;
   try {
-    r = await fetch(url, opts);
+    r = await fetch(url, { ...opts, signal: ctrl.signal });
   } catch (e: any) {
+    if (e.name === "AbortError") {
+      console.warn("[PDU-UI] Timeout sur", url);
+      throw new Error(`Délai dépassé (${timeoutMs/1000} s) sur ${path} — le PDU est peut-être injoignable`);
+    }
     console.error("[PDU-UI] Erreur réseau sur", url, e);
     throw new Error(`API injoignable (${API}) : le backend est-il démarré ? (${e.message})`);
+  } finally {
+    clearTimeout(timer);
   }
   dbg("←", r.status, url);
   if (!r.ok) {
@@ -57,11 +61,7 @@ function useToken() {
 }
 
 type Pdu = { id: string; ip: string; model?: string; location?: string; notes?: string };
-<<<<<<< HEAD
 type Outlet = { index: string; name: string; state: number; power_w?: number|null; current_a?: number|null; power_estimated?: boolean };
-=======
-type Outlet = { index: string; name: string; state: number; power_w?: number|null; current_a?: number|null };
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
 type Metrics = { voltage?: number; current?: number; power?: number; temperature?: number };
 type HistPoint = { ts: string; voltage?: number; current?: number; power?: number; temperature?: number };
 
@@ -77,8 +77,10 @@ export default function App() {
   const [paused, setPaused] = useState(false);
   const [discOpen, setDiscOpen] = useState(false);
   const [discCidr, setDiscCidr] = useState("192.168.1.0/24");
-  const [discResults, setDiscResults] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);       // mise à jour des données du PDU en cours
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [disc, setDisc] = useState<{running:boolean; total:number; done:number; found:any[]; error?:string|null}>({running:false, total:0, done:0, found:[]});
 
   useEffect(() => { if (!token) return; (async () => {
     try {
@@ -92,51 +94,87 @@ export default function App() {
     }
   })(); }, [token]);
 
-  useEffect(() => { if (!token || !sel) return; (async () => {
-    try {
-      dbg("Chargement du PDU", sel.id);
-      const [m, o, h] = await Promise.all([
-        apiFetch(`/pdus/${sel.id}/metrics?record=true`, { headers: { Authorization: `Bearer ${token}` } }).then(r=>r.json()),
-        apiFetch(`/pdus/${sel.id}/outlets`, { headers: { Authorization: `Bearer ${token}` } }).then(r=>r.json()),
-        apiFetch(`/pdus/${sel.id}/metrics/history?limit=${Math.ceil(PERIODS[period]/5)}`, { headers: { Authorization: `Bearer ${token}` } }).then(r=>r.json()),
-      ]);
-      dbg("PDU chargé:", { metrics: m, outlets: o.length, history: h.length });
-      setMetrics(m); setOutlets(o); setHistory(h); setErr(null);
-    } catch (e:any) { setErr(`Chargement du PDU "${sel.id}" impossible : ${e.message}`); }
-  })(); }, [sel, token, period]);
+  useEffect(() => { if (!token || !sel) return; let cancelled = false; (async () => {
+    setRefreshing(true);
+    dbg("Chargement du PDU", sel.id);
+    const H = { headers: { Authorization: `Bearer ${token}` } };
+    // allSettled : un échec (ex. PDU injoignable pour les prises) n'empêche pas
+    // d'afficher les autres données, et ne fige jamais l'interface.
+    const [m, o, h] = await Promise.allSettled([
+      apiFetch(`/pdus/${sel.id}/metrics?record=true`, H).then(r=>r.json()),
+      apiFetch(`/pdus/${sel.id}/outlets`, H).then(r=>r.json()),
+      apiFetch(`/pdus/${sel.id}/metrics/history?limit=${Math.ceil(PERIODS[period]/5)}`, H).then(r=>r.json()),
+    ]);
+    if (cancelled) return;
+    const errors: string[] = [];
+    if (m.status === "fulfilled") setMetrics(m.value); else errors.push(`métriques : ${m.reason.message}`);
+    if (o.status === "fulfilled") setOutlets(o.value); else { setOutlets([]); errors.push(`prises : ${o.reason.message}`); }
+    if (h.status === "fulfilled") setHistory(h.value); else errors.push(`historique : ${h.reason.message}`);
+    setErr(errors.length ? `PDU "${sel.id}" — ${errors.join(" | ")}` : null);
+    setLastUpdate(new Date());
+    setRefreshing(false);
+    dbg("PDU chargé", { ok: 3 - errors.length, erreurs: errors.length });
+  })(); return () => { cancelled = true; }; }, [sel, token, period]);
 
   useEffect(() => {
     if (!token || !sel || paused) return;
     const t = setInterval(async () => {
       try {
-        const m: Metrics = await fetch(`${API}/pdus/${sel.id}/metrics?record=true`, { headers: { Authorization: `Bearer ${token}` } }).then(r=>r.json());
+        setRefreshing(true);
+        const m: Metrics = await apiFetch(`/pdus/${sel.id}/metrics?record=true`, { headers: { Authorization: `Bearer ${token}` } }, 8000).then(r=>r.json());
         setMetrics(m);
+        setLastUpdate(new Date());
         const point: HistPoint = { ts: new Date().toISOString(), ...m };
         setHistory(h => {
           const maxPts = Math.ceil(PERIODS[period]/5);
           const next = [...h, point];
           return next.slice(-maxPts);
         });
-      } catch (e:any) { /* ignore transient */ }
+      } catch (e:any) { dbg("poll métriques ignoré:", e.message); }
+      finally { setRefreshing(false); }
     }, POLL_MS);
     return () => clearInterval(t);
   }, [sel, token, paused, period]);
 
+  // Suivi de la découverte en tâche de fond (progression sans bloquer l'interface)
+  useEffect(() => {
+    if (!token || !disc.running) return;
+    const t = setInterval(async () => {
+      try {
+        const s = await apiFetch(`/discover/status`, { headers: { Authorization: `Bearer ${token}` } }, 8000).then(r=>r.json());
+        setDisc(s);
+        if (!s.running) dbg("Découverte terminée:", s.found.length, "PDU trouvé(s)");
+      } catch (e:any) { dbg("statut découverte:", e.message); }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [token, disc.running]);
+
   const filtered = useMemo(() => pdus.filter(p => (p.id + p.ip + (p.location||"") + (p.model||"")).toLowerCase().includes(filter.toLowerCase())), [pdus, filter]);
 
-<<<<<<< HEAD
-  const renamePdu = async (p: Pdu) => {
-    if (!token) return;
-    const newId = window.prompt(`Nouveau nom pour le PDU "${p.id}" :`, p.id);
-    if (!newId || newId === p.id) return;
+  const [editPdu, setEditPdu] = useState<Pdu | null>(null);
+  const [editForm, setEditForm] = useState({ id: "", ip: "", location: "", notes: "" });
+  const [editSaving, setEditSaving] = useState(false);
+
+  const openEdit = (p: Pdu) => {
+    setEditForm({ id: p.id, ip: p.ip, location: p.location || "", notes: p.notes || "" });
+    setEditPdu(p);
+  };
+
+  const saveEdit = async () => {
+    if (!editPdu || !token) return;
+    setEditSaving(true);
     try {
-      dbg("Renommage PDU:", p.id, "->", newId);
-      const r = await apiFetch(`/pdus/${p.id}`, { method: "PUT", headers: {"Content-Type":"application/json", Authorization: `Bearer ${token}`}, body: JSON.stringify({ new_id: newId }) });
+      dbg("Édition PDU:", editPdu.id, editForm);
+      const body: any = { location: editForm.location, notes: editForm.notes };
+      if (editForm.id !== editPdu.id) body.new_id = editForm.id;
+      if (editForm.ip !== editPdu.ip) body.ip = editForm.ip;
+      const r = await apiFetch(`/pdus/${editPdu.id}`, { method: "PUT", headers: {"Content-Type":"application/json", Authorization: `Bearer ${token}`}, body: JSON.stringify(body) });
       const updated = await r.json();
-      setPdus(pdus => pdus.map(x => x.id === p.id ? updated : x));
-      if (sel?.id === p.id) setSel(updated);
-      setErr(null);
-    } catch (e:any) { setErr(`Renommage de "${p.id}" impossible : ${e.message}`); }
+      setPdus(pdus => pdus.map(x => x.id === editPdu.id ? updated : x));
+      if (sel?.id === editPdu.id) setSel(updated);   // re-déclenche le chargement (utile après changement d'IP)
+      setEditPdu(null); setErr(null);
+    } catch (e:any) { setErr(`Mise à jour de "${editPdu.id}" impossible : ${e.message}`); }
+    finally { setEditSaving(false); }
   };
 
   const renameOutlet = async (o: Outlet) => {
@@ -151,8 +189,6 @@ export default function App() {
     } catch (e:any) { setErr(`Renommage de la prise ${o.index} impossible : ${e.message}`); }
   };
 
-=======
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
   const delPdu = async (p: Pdu) => {
     if (!token) return;
     if (!window.confirm(`Supprimer le PDU "${p.id}" (${p.ip}) ?`)) return;
@@ -205,10 +241,7 @@ export default function App() {
               </div>
               <div className="flex items-center gap-1">
                 <span className="text-xs opacity-60">{p.model || 'Modèle inconnu'}</span>
-<<<<<<< HEAD
-                <button className="btn btn-ghost p-1" title={`Renommer ${p.id}`} onClick={(e)=>{ e.stopPropagation(); renamePdu(p); }}><Pencil className="w-4 h-4"/></button>
-=======
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
+                <button className="btn btn-ghost p-1" title={`Modifier ${p.id} (nom, IP, localisation)`} onClick={(e)=>{ e.stopPropagation(); openEdit(p); }}><Pencil className="w-4 h-4"/></button>
                 <button className="btn btn-ghost p-1" title={`Supprimer ${p.id}`} onClick={(e)=>{ e.stopPropagation(); delPdu(p); }}><Trash2 className="w-4 h-4 text-red-500"/></button>
               </div>
             </div>
@@ -227,9 +260,13 @@ export default function App() {
       {sel && (
         <section className="card p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold flex items-center gap-2"><Plug className="w-4 h-4"/> Prises — {sel.id}</h2>
-            <div className="flex gap-2">
-              <button className="btn" onClick={()=>sel && setSel({...sel})}><RefreshCw className="w-4 h-4"/></button>
+            <h2 className="font-semibold flex items-center gap-2">
+              <Plug className="w-4 h-4"/> Prises — {sel.id}
+              {refreshing && <RefreshCw className="w-4 h-4 animate-spin opacity-60" aria-label="Mise à jour en cours"/>}
+            </h2>
+            <div className="flex items-center gap-2">
+              {lastUpdate && <span className="text-xs opacity-50">MAJ {lastUpdate.toLocaleTimeString()}</span>}
+              <button className="btn" title="Rafraîchir maintenant" onClick={()=>sel && setSel({...sel})}><RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}/></button>
             </div>
           </div>
 
@@ -267,7 +304,6 @@ export default function App() {
               {outlets.map(o => (
                 <tr key={o.index} className="border-t border-neutral-200 dark:border-neutral-800">
                   <td>{o.index}</td>
-<<<<<<< HEAD
                   <td>
                     <span className="inline-flex items-center gap-1">
                       {o.name}
@@ -279,12 +315,6 @@ export default function App() {
                   <td title={o.power_estimated ? "Puissance estimée (V × I × cosφ) : le firmware ne fournit pas la mesure directe pour cette prise" : undefined}>
                     {o.power_w != null ? `${o.power_estimated ? '~' : ''}${o.power_w} W` : '—'}
                   </td>
-=======
-                  <td>{o.name}</td>
-                  <td>{o.state===-1? <span className="badge">Mesure</span> : o.state===1? <span className="badge badge-on">ON</span> : o.state===2? <span className="badge badge-off">OFF</span> : <span className="badge">?</span>}</td>
-                  <td>{o.current_a != null ? `${o.current_a} A` : '—'}</td>
-                  <td>{o.power_w != null ? `${o.power_w} W` : '—'}</td>
->>>>>>> 2b92c410788cd2d492efd5578c82d6a1c11d4499
                   <td className="flex gap-2">
                     {o.state===-1 ? (
                       <span className="text-xs opacity-60">PDU surveillée — non commutable via SNMP</span>
@@ -301,46 +331,95 @@ export default function App() {
         </section>
       )}
 
+      {/* Edit PDU Modal */}
+      {editPdu && (
+        <div className="fixed inset-0 bg-black/40 grid place-content-center p-4" onClick={()=>setEditPdu(null)}>
+          <div className="card p-4 w-[420px] space-y-3" onClick={e=>e.stopPropagation()}>
+            <h3 className="font-semibold flex items-center gap-2"><Pencil className="w-4 h-4"/> Modifier le PDU « {editPdu.id} »</h3>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs opacity-60">Nom (ID)</label>
+                <input className="input" value={editForm.id} onChange={e=>setEditForm(f=>({...f, id: e.target.value}))}/>
+              </div>
+              <div>
+                <label className="text-xs opacity-60">Adresse IP <span className="opacity-50">(moves / déménagements — l'historique est conservé)</span></label>
+                <input className="input" value={editForm.ip} onChange={e=>setEditForm(f=>({...f, ip: e.target.value}))}/>
+              </div>
+              <div>
+                <label className="text-xs opacity-60">Localisation</label>
+                <input className="input" placeholder="ex: DC1 / Baie A1" value={editForm.location} onChange={e=>setEditForm(f=>({...f, location: e.target.value}))}/>
+              </div>
+              <div>
+                <label className="text-xs opacity-60">Notes</label>
+                <input className="input" value={editForm.notes} onChange={e=>setEditForm(f=>({...f, notes: e.target.value}))}/>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn" onClick={()=>setEditPdu(null)}>Annuler</button>
+              <button className="btn btn-primary" disabled={editSaving} onClick={saveEdit}>{editSaving ? "Enregistrement…" : "Enregistrer"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Discovery Modal */}
       {discOpen && (
         <div className="fixed inset-0 bg-black/40 grid place-content-center p-4" onClick={()=>setDiscOpen(false)}>
           <div className="card p-4 w-[560px] space-y-3" onClick={e=>e.stopPropagation()}>
-            <h3 className="font-semibold">Découverte réseau</h3>
+            <h3 className="font-semibold flex items-center gap-2">
+              Découverte réseau
+              {disc.running && <RefreshCw className="w-4 h-4 animate-spin opacity-60"/>}
+            </h3>
             <div className="flex gap-2 items-center">
-              <input className="input" placeholder="CIDR (ex: 192.168.1.0/24)" value={discCidr} onChange={e=>setDiscCidr(e.target.value)} />
-              <button className="btn btn-primary" onClick={async()=>{
+              <input className="input" placeholder="CIDR (ex: 192.168.1.0/24)" value={discCidr} onChange={e=>setDiscCidr(e.target.value)} disabled={disc.running} />
+              <button className="btn btn-primary" disabled={disc.running} onClick={async()=>{
                 if (!token) return;
-                const r = await fetch(`${API}/discover?cidr=${encodeURIComponent(discCidr)}`, { headers: { Authorization: `Bearer ${token}` } });
-                const j = await r.json();
-                setDiscResults(j.found || []);
-              }}>Scanner</button>
+                try {
+                  dbg("Découverte lancée:", discCidr);
+                  const r = await apiFetch(`/discover/start`, { method: "POST", headers: {"Content-Type":"application/json", Authorization: `Bearer ${token}`}, body: JSON.stringify({cidr: discCidr}) }).then(r=>r.json());
+                  setDisc({running: true, total: r.total, done: 0, found: []});
+                  setErr(null);
+                } catch (e:any) { setErr(`Découverte : ${e.message}`); }
+              }}>{disc.running ? "Scan en cours…" : "Scanner"}</button>
             </div>
+            {(disc.running || disc.total > 0) && (
+              <div className="space-y-1">
+                <div className="h-2 rounded bg-neutral-200 dark:bg-neutral-800 overflow-hidden">
+                  <div className="h-full bg-blue-500 transition-all" style={{width: `${disc.total ? Math.round(100*disc.done/disc.total) : 0}%`}}/>
+                </div>
+                <div className="text-xs opacity-60">
+                  {disc.done}/{disc.total} adresses sondées — {disc.found.length} PDU trouvé(s)
+                  {!disc.running && disc.total > 0 && " — terminé"}
+                  {" "}· le scan continue en arrière-plan même si cette fenêtre est fermée
+                </div>
+              </div>
+            )}
             <div className="max-h-80 overflow-auto">
               <table className="table">
                 <thead><tr><th>IP</th><th>sysObjectID</th><th>Modèle</th><th></th></tr></thead>
                 <tbody>
-                  {discResults.map((x,i)=>(
+                  {disc.found.map((x,i)=>(
                     <tr key={i} className="border-t border-neutral-200 dark:border-neutral-800">
                       <td>{x.ip}</td>
                       <td className="text-xs opacity-70">{x.sysObjectID}</td>
                       <td>{x.suggested_model}</td>
                       <td>
-                        <button className="btn" onClick={async()=>{
+                        <button className="btn" disabled={pdus.some(p=>p.ip===x.ip)} onClick={async()=>{
                           if (!token) return;
-                          const id = `pdu-${x.ip.replaceAll('.','-')}`;
-                          const r = await fetch(`${API}/pdus`, { method: "POST", headers: {"Content-Type":"application/json", Authorization: `Bearer ${token}`}, body: JSON.stringify({id, ip: x.ip, model: x.suggested_model})});
-                          if (r.ok) {
+                          try {
+                            const id = `pdu-${x.ip.replaceAll('.','-')}`;
+                            const r = await apiFetch(`/pdus`, { method: "POST", headers: {"Content-Type":"application/json", Authorization: `Bearer ${token}`}, body: JSON.stringify({id, ip: x.ip, model: x.suggested_model})});
                             const p = await r.json();
-                            setPdus(pdus=>[...pdus, p]); setSel(p);
-                          }
-                        }}>Ajouter</button>
+                            setPdus(pdus=>[...pdus, p]); setSel(p); setErr(null);
+                          } catch (e:any) { setErr(`Ajout de ${x.ip} : ${e.message}`); }
+                        }}>{pdus.some(p=>p.ip===x.ip) ? "Déjà ajouté" : "Ajouter"}</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="text-xs opacity-60">Astuce : limitez la taille du CIDR (max 256 hôtes par requête).</div>
+            <div className="text-xs opacity-60">Sondes SNMP en parallèle côté serveur (max 256 hôtes) — l'interface reste utilisable pendant le scan.</div>
           </div>
         </div>
       )}
